@@ -4,6 +4,26 @@ import json
 import os
 from datetime import datetime, timedelta
 
+# === KEEP ALIVE SETUP ===
+from flask import Flask
+from threading import Thread
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "I'm alive!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+keep_alive()
+# === END KEEP ALIVE SETUP ===
+
 ADMIN_ID = 1085391944240332940
 DATA_FILE = "data.json"
 
