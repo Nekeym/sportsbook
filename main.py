@@ -416,4 +416,5 @@ async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     print("------")
 
-bot.run("MTQwMDMwMTQ1ODQzOTY3MTkyOQ.GBZQR8.P1ozrheEFIcw3u0iLpESy0vS8FC3013tYxfaUo")
+bot.run(os.getenv("DISCORD_TOKEN"))
+
