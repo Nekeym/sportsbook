@@ -3,9 +3,6 @@ from discord.ext import commands
 import json
 import os
 from datetime import datetime, timedelta
-from keep_alive import keep_alive  # <-- added this line
-
-keep_alive()  # <-- added this line to start the webserver to keep the bot alive
 
 ADMIN_ID = 1085391944240332940
 DATA_FILE = "data.json"
