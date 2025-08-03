@@ -19,8 +19,8 @@ ADMIN_ID = 1085391944240332940
 TOKEN = os.environ.get("TOKENFORBOTHERE")
 PAYOUT_CHANNEL_ID = 1401259843834216528  # <-- Replace with your payout channel ID
 
-USERS_FILE = "data/users.json"
-MATCHUPS_FILE = "data/matchups.json"
+USERS_FILE = "users.json"
+MATCHUPS_FILE = "matchups.json"
 
 # Ensure data folder and files exist
 os.makedirs("data", exist_ok=True)
