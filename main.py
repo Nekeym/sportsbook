@@ -16,7 +16,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # Constants
 ADMIN_ID = 1085391944240332940
 TOKEN = os.environ.get("TOKENFORBOTHERE")
-PAYOUT_CHANNEL_ID = 1401258371683975309  # <-- Replace with your payout channel ID
+PAYOUT_CHANNEL_ID = 1401259843834216528  # <-- Replace with your payout channel ID
 FLASK_HOST = "0.0.0.0"
 FLASK_PORT = 8080
 
