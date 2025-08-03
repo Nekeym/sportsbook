@@ -15,10 +15,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Constants
 ADMIN_ID = 1085391944240332940
+# Token loaded securely from environment variable; set TOKENFORBOTHERE in your Docker or hosting env
 TOKEN = os.environ.get("TOKENFORBOTHERE")
 PAYOUT_CHANNEL_ID = 1401259843834216528  # <-- Replace with your payout channel ID
-FLASK_HOST = "0.0.0.0"
-FLASK_PORT = 8080
 
 USERS_FILE = "data/users.json"
 MATCHUPS_FILE = "data/matchups.json"
@@ -92,6 +91,7 @@ def create_embed(title, description="", color=discord.Color.blurple()):
 def no_permission_embed():
     return create_embed("🟥 YOU DO NOT HAVE PERMISSION TO USE THIS 🟥", color=discord.Color.red())
 
+# === Admin Commands ===
 @bot.command()
 async def admincommands(ctx):
     if ctx.author.id != ADMIN_ID:
@@ -411,6 +411,7 @@ async def admincommands(ctx):
 
     await ctx.send(embed=embed, view=AdminView())
 
+# === Betting Commands ===
 @bot.command()
 async def betting(ctx):
     user = get_user(ctx.author.id)
