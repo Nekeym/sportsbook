@@ -5,6 +5,7 @@ import json
 import os
 from datetime import datetime, timedelta
 from keep_alive import keep_alive
+import subprocess  # <-- added for pushing to GitHub
 
 # Intents setup
 intents = discord.Intents.default()
@@ -39,6 +40,24 @@ def load_json(path):
 def save_json(path, data):
     with open(path, "w") as f:
         json.dump(data, f, indent=4)
+    # <-- Call GitHub push automatically after saving
+    try:
+        push_json_to_github()
+    except Exception as e:
+        print(f"Failed to push JSONs: {e}")
+
+# GitHub push helper
+def push_json_to_github():
+    repo_path = os.getcwd()  # assuming main.py is in repo root
+    os.chdir(repo_path)
+    subprocess.run(["git", "add", USERS_FILE, MATCHUPS_FILE])
+    commit_msg = "Auto-update JSONs from bot"
+    subprocess.run(["git", "commit", "-m", commit_msg])
+    github_user = "<YOUR_GITHUB_USERNAME>"      # <-- replace
+    github_repo = "<YOUR_REPO_NAME>"           # <-- replace
+    token = os.getenv("GITHUB_TOKEN")
+    push_url = f"https://{token}@github.com/{github_user}/{github_repo}.git"
+    subprocess.run(["git", "push", push_url, "HEAD:main"])
 
 # User data helpers
 def get_user(user_id):
