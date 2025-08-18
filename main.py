@@ -53,8 +53,8 @@ def push_json_to_github():
     subprocess.run(["git", "add", USERS_FILE, MATCHUPS_FILE])
     commit_msg = "Auto-update JSONs from bot"
     subprocess.run(["git", "commit", "-m", commit_msg])
-    github_user = "<YOUR_GITHUB_USERNAME>"      # <-- replace
-    github_repo = "<YOUR_REPO_NAME>"           # <-- replace
+    github_user = "<Nekeym>"      # <-- replace
+    github_repo = "<sportsbook>"           # <-- replace
     token = os.getenv("GITHUB_TOKEN")
     push_url = f"https://{token}@github.com/{github_user}/{github_repo}.git"
     subprocess.run(["git", "push", push_url, "HEAD:main"])
