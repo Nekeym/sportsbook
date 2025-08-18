@@ -5,7 +5,8 @@ import json
 import os
 from datetime import datetime, timedelta
 from keep_alive import keep_alive
-import subprocess  # <-- added for pushing to GitHub
+import base64
+import requests  # <-- for GitHub API push
 
 # Intents setup
 intents = discord.Intents.default()
@@ -37,27 +38,57 @@ def load_json(path):
     with open(path, "r") as f:
         return json.load(f)
 
+# GitHub API push helper
+def push_json_to_github_api(file_path, repo_path, commit_message="Auto-update JSON"):
+    github_user = "Nekeym"           # your GitHub username
+    github_repo = "sportsbook"       # your repo name
+    branch = "main"                  # your branch
+
+    # Load the file content
+    with open(file_path, "r") as f:
+        content = f.read()
+
+    # Encode content in base64
+    b64_content = base64.b64encode(content.encode()).decode()
+
+    # Get SHA if file exists
+    url_get = f"https://api.github.com/repos/{github_user}/{github_repo}/contents/{repo_path}?ref={branch}"
+    headers = {"Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}"}
+    response = requests.get(url_get, headers=headers)
+
+    sha = None
+    if response.status_code == 200:
+        sha = response.json()["sha"]
+
+    # Push/update file
+    url_put = f"https://api.github.com/repos/{github_user}/{github_repo}/contents/{repo_path}"
+    data = {
+        "message": commit_message,
+        "content": b64_content,
+        "branch": branch
+    }
+    if sha:
+        data["sha"] = sha
+
+    put_response = requests.put(url_put, headers=headers, data=json.dumps(data))
+    if put_response.status_code in [200, 201]:
+        print(f"{file_path} successfully pushed to GitHub!")
+    else:
+        print(f"Failed to push {file_path}: {put_response.text}")
+
+# Push both JSONs
+def push_all_jsons():
+    try:
+        push_json_to_github_api(USERS_FILE, "users.json", "Update users.json")
+        push_json_to_github_api(MATCHUPS_FILE, "matchups.json", "Update matchups.json")
+    except Exception as e:
+        print(f"Failed to push JSONs via API: {e}")
+
+# Updated save_json to call API push
 def save_json(path, data):
     with open(path, "w") as f:
         json.dump(data, f, indent=4)
-    # <-- Call GitHub push automatically after saving
-    try:
-        push_json_to_github()
-    except Exception as e:
-        print(f"Failed to push JSONs: {e}")
-
-# GitHub push helper
-def push_json_to_github():
-    repo_path = os.getcwd()  # assuming main.py is in repo root
-    os.chdir(repo_path)
-    subprocess.run(["git", "add", USERS_FILE, MATCHUPS_FILE])
-    commit_msg = "Auto-update JSONs from bot"
-    subprocess.run(["git", "commit", "-m", commit_msg])
-    github_user = "<Nekeym>"      # <-- replace
-    github_repo = "<sportsbook>"           # <-- replace
-    token = os.getenv("GITHUB_TOKEN")
-    push_url = f"https://{token}@github.com/{github_user}/{github_repo}.git"
-    subprocess.run(["git", "push", push_url, "HEAD:main"])
+    push_all_jsons()  # <-- push to GitHub after saving
 
 # User data helpers
 def get_user(user_id):
