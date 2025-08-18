@@ -462,287 +462,295 @@ async def admincommands(ctx):
     await ctx.send(embed=embed, view=AdminView())
 
 # === Betting Commands ===
+import discord
+from discord.ext import commands
+from discord.ui import Button, View, Modal, TextInput
+from datetime import datetime, timedelta
+
+# -------------------------------
+# MAIN BETTING MENU BUTTONS/VIEW
+# -------------------------------
+class BettingView(View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(MoneyButton())
+        self.add_item(DailyButton())
+        self.add_item(MatchupsButton())
+        self.add_item(BetHistoryButton())
+        self.add_item(WinHistoryButton())
+        self.add_item(LeaderboardButton())
+
+class MoneyButton(Button):
+    def __init__(self):
+        super().__init__(label="Money", style=discord.ButtonStyle.success, emoji="💵")
+
+    async def callback(self, interaction: discord.Interaction):
+        user_data = get_user(interaction.user.id)
+        await interaction.response.send_message(
+            embed=create_embed("💰 Account Balance", f"You currently have 💵{user_data['money']} to bet with."),
+            ephemeral=True
+        )
+
+class DailyButton(Button):
+    def __init__(self):
+        super().__init__(label="Daily Grab", style=discord.ButtonStyle.primary, emoji="🟣")
+
+    async def callback(self, interaction: discord.Interaction):
+        user_data = get_user(interaction.user.id)
+        last_claim = datetime.fromisoformat(user_data["last_daily"])
+        if datetime.utcnow() - last_claim >= timedelta(hours=24):
+            change_user_money(interaction.user.id, 25)
+            update_user(interaction.user.id, {"last_daily": datetime.utcnow().isoformat()})
+            await interaction.response.send_message(
+                embed=create_embed("✅ Daily Claimed", "You received 💵25! Come back in 24 hours."),
+                ephemeral=True
+            )
+        else:
+            next_time = last_claim + timedelta(hours=24)
+            wait_time = next_time - datetime.utcnow()
+            hours, remainder = divmod(wait_time.total_seconds(), 3600)
+            minutes = remainder // 60
+            await interaction.response.send_message(
+                embed=create_embed("⏳ Not Ready Yet", f"Come back in {int(hours)}h {int(minutes)}m to claim again."),
+                ephemeral=True
+            )
+
+class MatchupsButton(Button):
+    def __init__(self):
+        super().__init__(label="Matchups", style=discord.ButtonStyle.secondary, emoji="🤎")
+
+    async def callback(self, interaction: discord.Interaction):
+        matchups = load_json(MATCHUPS_FILE)
+        if not matchups:
+            await interaction.response.send_message(embed=create_embed("📭 No Matchups", "No matchups available right now."), ephemeral=True)
+            return
+
+        for mid, data in matchups.items():
+            embed = create_embed(
+                f"📌 Matchup #{mid}",
+                f"**{data['away']}** @ **{data['home']}**\n\n"
+                f"Spread:\n• {data['away']}: {data['spread']['away']:+}\n"
+                f"• {data['home']}: {data['spread']['home']:+}\n\n"
+                f"Moneyline:\n• {data['away']}: {data['moneyline']['away']}\n"
+                f"• {data['home']}: {data['moneyline']['home']}\n\n"
+                f"O/U: {data['over_under']}"
+            )
+            view = MatchupBetButtonView(mid)
+            try:
+                await interaction.user.send(embed=embed, view=view)
+            except discord.Forbidden:
+                await interaction.response.send_message(embed=create_embed("❌ Cannot send DM", "Please enable DMs to receive matchups."), ephemeral=True)
+                return
+
+        await interaction.response.send_message(embed=create_embed("📬 Sent", "Matchups sent to your DMs."), ephemeral=True)
+
+class MatchupBetButtonView(View):
+    def __init__(self, matchup_id):
+        super().__init__(timeout=180)
+        self.add_item(BetButton(matchup_id))
+
+class BetButton(Button):
+    def __init__(self, matchup_id):
+        super().__init__(label="BET", style=discord.ButtonStyle.danger)
+        self.mid = matchup_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.bot:
+            return
+        await show_bet_type_menu(interaction, self.mid)
+
+class BetHistoryButton(Button):
+    def __init__(self):
+        super().__init__(label="Bet History", style=discord.ButtonStyle.danger, emoji="⚫")
+
+    async def callback(self, interaction: discord.Interaction):
+        user_data = get_user(interaction.user.id)
+        history = user_data["bet_history"]
+        if not history:
+            await interaction.response.send_message(embed=create_embed("📃 Bet History", "You haven't placed any bets yet."), ephemeral=True)
+            return
+        text = "\n".join(history[-10:])
+        await interaction.response.send_message(embed=create_embed("📃 Bet History (Last 10)", text), ephemeral=True)
+
+class WinHistoryButton(Button):
+    def __init__(self):
+        super().__init__(label="Win History", style=discord.ButtonStyle.secondary, emoji="🟡")
+
+    async def callback(self, interaction: discord.Interaction):
+        user_data = get_user(interaction.user.id)
+        history = user_data["win_history"]
+        if not history:
+            await interaction.response.send_message(embed=create_embed("📈 Win History", "No results yet."), ephemeral=True)
+            return
+        text = "\n".join(history[-10:])
+        await interaction.response.send_message(embed=create_embed("📈 Win History (Last 10)", text), ephemeral=True)
+
+class LeaderboardButton(Button):
+    def __init__(self):
+        super().__init__(label="Leaderboard", style=discord.ButtonStyle.primary, emoji="🔵")
+
+    async def callback(self, interaction: discord.Interaction):
+        users = load_json(USERS_FILE)
+        sorted_users = sorted(users.items(), key=lambda x: x[1]["money"], reverse=True)
+        text = ""
+        for i, (uid, data) in enumerate(sorted_users[:10], 1):
+            try:
+                member = await bot.fetch_user(int(uid))
+                wins = len(data.get("win_history", []))
+                losses = len(data.get("bet_history", [])) - wins
+                text += f"**{i}. {member.display_name}** - 💵{data['money']} | {wins}W-{losses}L\n"
+            except Exception:
+                continue
+        await interaction.response.send_message(embed=create_embed("🏆 Leaderboard", text), ephemeral=True)
+
+# -------------------------------
+# BET TYPE MENU
+# -------------------------------
+class TypeSelectView(View):
+    def __init__(self, matchup_id):
+        super().__init__(timeout=60)
+        self.add_item(SpreadButton(matchup_id))
+        self.add_item(OUButton(matchup_id))
+
+class SpreadButton(Button):
+    def __init__(self, matchup_id):
+        super().__init__(label="SPREAD", style=discord.ButtonStyle.primary)
+        self.mid = matchup_id
+    async def callback(self, interaction):
+        await show_spread_team_picker(interaction, self.mid)
+
+class OUButton(Button):
+    def __init__(self, matchup_id):
+        super().__init__(label="O/U", style=discord.ButtonStyle.secondary)
+        self.mid = matchup_id
+    async def callback(self, interaction):
+        await show_ou_picker(interaction, self.mid)
+
+async def show_bet_type_menu(interaction: discord.Interaction, matchup_id: str):
+    await interaction.response.send_message(
+        embed=create_embed("📈 Choose Bet Type", "Click one below."),
+        view=TypeSelectView(matchup_id),
+        ephemeral=True
+    )
+
+# -------------------------------
+# SPREAD TEAM PICKER
+# -------------------------------
+class TeamSpreadView(View):
+    def __init__(self, matchup_id, matchup):
+        super().__init__(timeout=60)
+        self.add_item(TeamButton("away", matchup_id, matchup["away"], matchup["spread"]["away"]))
+        self.add_item(TeamButton("home", matchup_id, matchup["home"], matchup["spread"]["home"]))
+
+class TeamButton(Button):
+    def __init__(self, team_key, matchup_id, name, spread):
+        label = f"{name} ({spread:+})"
+        super().__init__(label=label, style=discord.ButtonStyle.success)
+        self.team_key = team_key
+        self.mid = matchup_id
+    async def callback(self, interaction):
+        await get_bet_amount(interaction, self.mid, "spread", self.team_key)
+
+async def show_spread_team_picker(interaction: discord.Interaction, matchup_id: str):
+    matchup = load_json(MATCHUPS_FILE)[matchup_id]
+    await interaction.response.send_message(
+        embed=create_embed("📊 Choose Team", "Choose which spread to bet."),
+        view=TeamSpreadView(matchup_id, matchup),
+        ephemeral=True
+    )
+
+# -------------------------------
+# OVER/UNDER PICKER
+# -------------------------------
+class OUView(View):
+    def __init__(self, matchup_id):
+        super().__init__(timeout=60)
+        self.add_item(OUChoiceButton("over", matchup_id))
+        self.add_item(OUChoiceButton("under", matchup_id))
+
+class OUChoiceButton(Button):
+    def __init__(self, label_val, matchup_id):
+        super().__init__(label=label_val.upper(), style=discord.ButtonStyle.success)
+        self.label_val = label_val
+        self.mid = matchup_id
+    async def callback(self, interaction):
+        await get_bet_amount(interaction, self.mid, "ou", self.label_val)
+
+async def show_ou_picker(interaction: discord.Interaction, matchup_id: str):
+    matchup = load_json(MATCHUPS_FILE)[matchup_id]
+    await interaction.response.send_message(
+        embed=create_embed("📈 Bet Over/Under", f"Match O/U: {matchup['over_under']}"),
+        view=OUView(matchup_id),
+        ephemeral=True
+    )
+
+# -------------------------------
+# BET AMOUNT MODAL
+# -------------------------------
+class AmountModal(Modal):
+    def __init__(self, matchup_id, bet_type, target):
+        super().__init__(title="Enter Bet Amount")
+        self.matchup_id = matchup_id
+        self.bet_type = bet_type
+        self.target = target
+        self.amount = TextInput(label="Amount to Bet", placeholder="e.g. 100", required=True)
+        self.add_item(self.amount)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        user = get_user(interaction.user.id)
+        try:
+            bet_amount = int(self.amount.value)
+            if bet_amount <= 0:
+                raise ValueError
+        except:
+            await interaction.response.send_message(embed=create_embed("⚠️ Invalid Amount", "Please enter a positive number."), ephemeral=True)
+            return
+
+        if bet_amount > user["money"]:
+            missing = bet_amount - user["money"]
+            await interaction.response.send_message(embed=create_embed("🛑 Insufficient Funds", f"You are missing 💸{missing} to place this bet."), ephemeral=True)
+            return
+
+        matchups = load_json(MATCHUPS_FILE)
+        if self.matchup_id not in matchups:
+            await interaction.response.send_message(embed=create_embed("❌ Matchup not found."), ephemeral=True)
+            return
+
+        matchup = matchups[self.matchup_id]
+        bets_on_target = [b for b in matchup.get("bets", []) if b["type"] == self.bet_type and b["target"] == self.target]
+        total_on_target = sum(b["amount"] for b in bets_on_target)
+        payout_multiplier = max(1.8 - (total_on_target / 1000), 1.1)
+        payout = round(bet_amount * payout_multiplier)
+
+        # Record bet
+        if "bets" not in matchup:
+            matchup["bets"] = []
+        bet = {"user": interaction.user.id, "amount": bet_amount, "type": self.bet_type, "target": self.target, "payout": payout}
+        matchup["bets"].append(bet)
+        save_json(MATCHUPS_FILE, matchups)
+
+        change_user_money(interaction.user.id, -bet_amount)
+        log_user_bet(interaction.user.id, f"{datetime.utcnow().strftime('%m/%d %H:%M')} | {self.target.upper()} | {self.bet_type.upper()} | 💵{bet_amount}")
+
+        await interaction.response.send_message(
+            embed=create_embed("✅ Bet Placed", f"You bet 💵{bet_amount} on **{self.target.upper()}** ({self.bet_type.upper()})\nPotential payout: 💵{payout}"),
+            ephemeral=True
+        )
+
+async def get_bet_amount(interaction: discord.Interaction, matchup_id, bet_type, target):
+    await interaction.response.send_modal(AmountModal(matchup_id, bet_type, target))
+
+# -------------------------------
+# COMMAND
+# -------------------------------
 @bot.command()
 async def betting(ctx):
-    user = get_user(ctx.author.id)
     embed = create_embed(
         "📊 Sportsbook Portal",
         "Payouts adjust based on how many people bet towards one team.\n\nSelect an option below:"
     )
-
-    class BettingView(View):
-        def __init__(self):
-            super().__init__(timeout=None)
-            self.add_item(self.Money())
-            self.add_item(self.Daily())
-            self.add_item(self.Matchups())
-            self.add_item(self.BetHistory())
-            self.add_item(self.WinHistory())
-            self.add_item(self.Leaderboard())
-
-        class Money(Button):
-            def __init__(self):
-                super().__init__(label="Money", style=discord.ButtonStyle.success, emoji="💵")
-
-            async def callback(self, interaction: discord.Interaction):
-                user_data = get_user(interaction.user.id)
-                await interaction.response.send_message(
-                    embed=create_embed("💰 Account Balance", f"You currently have 💵{user_data['money']} to bet with."),
-                    ephemeral=True
-                )
-
-        class Daily(Button):
-            def __init__(self):
-                super().__init__(label="Daily Grab", style=discord.ButtonStyle.primary, emoji="🟣")
-
-            async def callback(self, interaction: discord.Interaction):
-                user_data = get_user(interaction.user.id)
-                last_claim = datetime.fromisoformat(user_data["last_daily"])
-                if datetime.utcnow() - last_claim >= timedelta(hours=24):
-                    change_user_money(interaction.user.id, 25)
-                    update_user(interaction.user.id, {"last_daily": datetime.utcnow().isoformat()})
-                    await interaction.response.send_message(
-                        embed=create_embed("✅ Daily Claimed", "You received 💵25! Come back in 24 hours."),
-                        ephemeral=True
-                    )
-                else:
-                    next_time = last_claim + timedelta(hours=24)
-                    wait_time = next_time - datetime.utcnow()
-                    hours, remainder = divmod(wait_time.total_seconds(), 3600)
-                    minutes = remainder // 60
-                    await interaction.response.send_message(
-                        embed=create_embed("⏳ Not Ready Yet", f"Come back in {int(hours)}h {int(minutes)}m to claim again."),
-                        ephemeral=True
-                    )
-
-        class Matchups(Button):
-            def __init__(self):
-                super().__init__(label="Matchups", style=discord.ButtonStyle.secondary, emoji="🤎")
-
-            async def callback(self, interaction: discord.Interaction):
-                matchups = load_json(MATCHUPS_FILE)
-                if not matchups:
-                    await interaction.response.send_message(
-                        embed=create_embed("📭 No Matchups", "No matchups available right now."),
-                        ephemeral=True
-                    )
-                    return
-
-                for mid, data in matchups.items():
-                    embed = create_embed(
-                        f"📌 Matchup #{mid}",
-                        f"**{data['away']}** @ **{data['home']}**\n\n"
-                        f"Spread:\n• {data['away']}: {data['spread']['away']:+}\n"
-                        f"• {data['home']}: {data['spread']['home']:+}\n\n"
-                        f"Moneyline:\n• {data['away']}: {data['moneyline']['away']}\n"
-                        f"• {data['home']}: {data['moneyline']['home']}\n\n"
-                        f"O/U: {data['over_under']}"
-                    )
-
-                    class BetButton(Button):
-                        def __init__(self, mid):
-                            super().__init__(label="BET", style=discord.ButtonStyle.danger)
-                            self.mid = mid
-
-                        async def callback(self, interaction: discord.Interaction):
-                            if interaction.user.bot:
-                                return
-                            await show_bet_type_menu(interaction, self.mid)
-
-                    view = View(timeout=180)
-                    view.add_item(BetButton(mid))
-                    try:
-                        await interaction.user.send(embed=embed, view=view)
-                    except discord.Forbidden:
-                        await interaction.response.send_message(
-                            embed=create_embed("❌ Cannot send DM", "Please enable DMs to receive matchups."),
-                            ephemeral=True
-                        )
-                        return
-                await interaction.response.send_message(
-                    embed=create_embed("📬 Sent", "Matchups sent to your DMs."),
-                    ephemeral=True
-                )
-
-        class BetHistory(Button):
-            def __init__(self):
-                super().__init__(label="Bet History", style=discord.ButtonStyle.danger, emoji="⚫")
-
-            async def callback(self, interaction: discord.Interaction):
-                user_data = get_user(interaction.user.id)
-                history = user_data["bet_history"]
-                if not history:
-                    await interaction.response.send_message(
-                        embed=create_embed("📃 Bet History", "You haven't placed any bets yet."),
-                        ephemeral=True
-                    )
-                    return
-                text = "\n".join(history[-10:])
-                await interaction.response.send_message(embed=create_embed("📃 Bet History (Last 10)", text), ephemeral=True)
-
-        class WinHistory(Button):
-            def __init__(self):
-                super().__init__(label="Win History", style=discord.ButtonStyle.secondary, emoji="🟡")
-
-            async def callback(self, interaction: discord.Interaction):
-                user_data = get_user(interaction.user.id)
-                history = user_data["win_history"]
-                if not history:
-                    await interaction.response.send_message(
-                        embed=create_embed("📈 Win History", "No results yet."),
-                        ephemeral=True
-                    )
-                    return
-                text = "\n".join(history[-10:])
-                await interaction.response.send_message(embed=create_embed("📈 Win History (Last 10)", text), ephemeral=True)
-
-        class Leaderboard(Button):
-            def __init__(self):
-                super().__init__(label="Leaderboard", style=discord.ButtonStyle.primary, emoji="🔵")
-
-            async def callback(self, interaction: discord.Interaction):
-                users = load_json(USERS_FILE)
-                sorted_users = sorted(users.items(), key=lambda x: x[1]["money"], reverse=True)
-                text = ""
-                for i, (uid, data) in enumerate(sorted_users[:10], 1):
-                    try:
-                        member = await bot.fetch_user(int(uid))
-                        wins = len(data.get("win_history", []))
-                        losses = len(data.get("bet_history", [])) - wins
-                        text += f"**{i}. {member.display_name}** - 💵{data['money']} | {wins}W-{losses}L\n"
-                    except Exception:
-                        continue
-                await interaction.response.send_message(embed=create_embed("🏆 Leaderboard", text), ephemeral=True)
-
     await ctx.send(embed=embed, view=BettingView())
 
-async def show_bet_type_menu(interaction: discord.Interaction, matchup_id: str):
-    matchups = load_json(MATCHUPS_FILE)
-    if matchup_id not in matchups:
-        await interaction.response.send_message(embed=create_embed("❌ Matchup not found."), ephemeral=True)
-        return
-
-    class TypeSelect(View):
-        def __init__(self):
-            super().__init__(timeout=60)
-            self.add_item(self.SpreadButton())
-            self.add_item(self.OUButton())
-
-        class SpreadButton(Button):
-            def __init__(self):
-                super().__init__(label="SPREAD", style=discord.ButtonStyle.primary)
-
-            async def callback(self, interaction2: discord.Interaction):
-                await show_spread_team_picker(interaction2, matchup_id)
-
-        class OUButton(Button):
-            def __init__(self):
-                super().__init__(label="O/U", style=discord.ButtonStyle.secondary)
-
-            async def callback(self, interaction2: discord.Interaction):
-                await show_ou_picker(interaction2, matchup_id)
-
-    await interaction.response.send_message(embed=create_embed("📈 Choose Bet Type", "Click one below."), view=TypeSelect(), ephemeral=True)
-
-
-async def show_spread_team_picker(interaction: discord.Interaction, matchup_id: str):
-    matchup = load_json(MATCHUPS_FILE)[matchup_id]
-
-    class TeamSpread(View):
-        def __init__(self):
-            super().__init__(timeout=60)
-            self.add_item(self.TeamButton("away", matchup["away"], matchup["spread"]["away"]))
-            self.add_item(self.TeamButton("home", matchup["home"], matchup["spread"]["home"]))
-
-        class TeamButton(Button):
-            def __init__(self, team_key, name, spread):
-                label = f"{name} ({spread:+})"
-                super().__init__(label=label, style=discord.ButtonStyle.success)
-                self.team_key = team_key
-
-            async def callback(self, i: discord.Interaction):
-                await get_bet_amount(i, matchup_id, "spread", self.team_key)
-
-    await interaction.response.send_message(embed=create_embed("📊 Choose Team", "Choose which spread to bet."), view=TeamSpread(), ephemeral=True)
-
-
-async def show_ou_picker(interaction: discord.Interaction, matchup_id: str):
-    matchup = load_json(MATCHUPS_FILE)[matchup_id]
-
-    class OUButtons(View):
-        def __init__(self):
-            super().__init__(timeout=60)
-            self.add_item(self.OUButton("over"))
-            self.add_item(self.OUButton("under"))
-
-        class OUButton(Button):
-            def __init__(self, label):
-                super().__init__(label=label.upper(), style=discord.ButtonStyle.success)
-                self.label_val = label.lower()
-
-            async def callback(self, i: discord.Interaction):
-                await get_bet_amount(i, matchup_id, "ou", self.label_val)
-
-    await interaction.response.send_message(embed=create_embed("📈 Bet Over/Under", f"Match O/U: {matchup['over_under']}"), view=OUButtons(), ephemeral=True)
-
-
-async def get_bet_amount(interaction: discord.Interaction, matchup_id: str, bet_type: str, target: str):
-    class AmountModal(Modal, title="Enter Bet Amount"):
-        amount = TextInput(label="Amount to Bet", placeholder="e.g. 100", required=True)
-
-        async def on_submit(self, modal_interaction: discord.Interaction):
-            user = get_user(modal_interaction.user.id)
-            try:
-                bet_amount = int(self.amount.value)
-                if bet_amount <= 0:
-                    raise ValueError
-            except:
-                await modal_interaction.response.send_message(embed=create_embed("⚠️ Invalid Amount", "Please enter a positive number."), ephemeral=True)
-                return
-
-            if bet_amount > user["money"]:
-                missing = bet_amount - user["money"]
-                await modal_interaction.response.send_message(
-                    embed=create_embed("🛑 Insufficient Funds", f"You are missing 💸{missing} to place this bet."),
-                    ephemeral=True
-                )
-                return
-
-            matchups = load_json(MATCHUPS_FILE)
-            if matchup_id not in matchups:
-                await modal_interaction.response.send_message(embed=create_embed("❌ Matchup not found."), ephemeral=True)
-                return
-
-            matchup = matchups[matchup_id]
-
-            # Calculate dynamic payout multiplier based on total bet volume on the selected target
-            bets_on_target = [b for b in matchup["bets"] if b["type"] == bet_type and b["target"] == target]
-            total_on_target = sum(b["amount"] for b in bets_on_target)
-            payout_multiplier = max(1.8 - (total_on_target / 1000), 1.1)  # Adjust odds based on bet volume
-
-            payout = round(bet_amount * payout_multiplier)
-
-            # Record the bet
-            bet = {
-                "user": modal_interaction.user.id,
-                "amount": bet_amount,
-                "type": bet_type,
-                "target": target,
-                "payout": payout
-            }
-            matchup["bets"].append(bet)
-            save_json(MATCHUPS_FILE, matchups)
-
-            # Deduct bet amount from user balance
-            change_user_money(modal_interaction.user.id, -bet_amount)
-            log_user_bet(modal_interaction.user.id, f"{datetime.utcnow().strftime('%m/%d %H:%M')} | {target.upper()} | {bet_type.upper()} | 💵{bet_amount}")
-
-            await modal_interaction.response.send_message(
-                embed=create_embed("✅ Bet Placed", f"You bet 💵{bet_amount} on **{target.upper()}** ({bet_type.upper()})\nPotential payout: 💵{payout}"),
-                ephemeral=True
-            )
-
-    await interaction.response.send_modal(AmountModal())
 
 print("Starting bot...")
 keep_alive()
