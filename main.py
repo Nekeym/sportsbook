@@ -479,112 +479,94 @@ class DeleteMatchupButton(Button):
             await interaction.response.send_message(embed=create_embed("⚠️ Error Launching Modal", f"{e}"), ephemeral=True)
 
 # -------------------------------
-# User Portal Buttons
+# Betting Portal Buttons
 # -------------------------------
-
-# 9a. Money button
 class MoneyButton(Button):
     def __init__(self):
         super().__init__(label="Money", style=discord.ButtonStyle.success, emoji="💵")
-
     async def callback(self, interaction: discord.Interaction):
-        try:
-            user_data = get_user(interaction.user.id)
-            await interaction.response.send_message(
-                embed=create_embed("💰 Account Balance", f"You currently have 💵{user_data['money']} to bet with."),
-                ephemeral=True
-            )
-        except Exception as e:
-            await interaction.response.send_message(embed=create_embed("⚠️ Error", str(e)), ephemeral=True)
+        user_data = get_user(interaction.user.id)
+        await interaction.response.send_message(
+            embed=create_embed("💰 Account Balance", f"You currently have 💵{user_data['money']} to bet with."),
+            ephemeral=True
+        )
 
-# 9b. Daily claim
 class DailyButton(Button):
     def __init__(self):
         super().__init__(label="Daily Grab", style=discord.ButtonStyle.primary, emoji="🟣")
-
     async def callback(self, interaction: discord.Interaction):
-        try:
-            user_data = get_user(interaction.user.id)
-            last_claim = datetime.fromisoformat(user_data["last_daily"])
-            now = datetime.utcnow()
+        user_data = get_user(interaction.user.id)
+        last_claim = datetime.fromisoformat(user_data["last_daily"])
+        if datetime.utcnow() - last_claim >= timedelta(hours=24):
+            change_user_money(interaction.user.id, 25)
+            update_user(interaction.user.id, {"last_daily": datetime.utcnow().isoformat()})
+            await interaction.response.send_message(embed=create_embed("✅ Daily Claimed", "You received 💵25! Come back in 24 hours."), ephemeral=True)
+        else:
+            next_time = last_claim + timedelta(hours=24)
+            wait_time = next_time - datetime.utcnow()
+            hours, remainder = divmod(wait_time.total_seconds(), 3600)
+            minutes = remainder // 60
+            await interaction.response.send_message(embed=create_embed("⏳ Not Ready Yet", f"Come back in {int(hours)}h {int(minutes)}m to claim again."), ephemeral=True)
 
-            if now - last_claim >= timedelta(hours=24):
-                change_user_money(interaction.user.id, 25)
-                update_user(interaction.user.id, {"last_daily": now.isoformat()})
-                await interaction.response.send_message(embed=create_embed("✅ Daily Claimed", "You received 💵25! Come back in 24 hours."), ephemeral=True)
-            else:
-                next_time = last_claim + timedelta(hours=24)
-                wait_time = next_time - now
-                hours, remainder = divmod(wait_time.total_seconds(), 3600)
-                minutes = remainder // 60
-                await interaction.response.send_message(
-                    embed=create_embed("⏳ Not Ready Yet", f"Come back in {int(hours)}h {int(minutes)}m to claim again."),
-                    ephemeral=True
-                )
-        except Exception as e:
-            await interaction.response.send_message(embed=create_embed("⚠️ Error", str(e)), ephemeral=True)
-
-# 9c. Matchups button
 class MatchupsButton(Button):
     def __init__(self):
         super().__init__(label="Matchups", style=discord.ButtonStyle.secondary, emoji="🤎")
-
     async def callback(self, interaction: discord.Interaction):
-        try:
-            matchups = load_json(MATCHUPS_FILE)
-            if not matchups:
-                await interaction.response.send_message(embed=create_embed("📭 No Matchups", "No matchups available right now."), ephemeral=True)
+        matchups = load_json(MATCHUPS_FILE)
+        if not matchups:
+            await interaction.response.send_message(embed=create_embed("📭 No Matchups", "No matchups available right now."), ephemeral=True)
+            return
+
+        for mid, data in matchups.items():
+            embed = create_embed(
+                f"📌 Matchup #{mid}",
+                f"**{data['away']}** @ **{data['home']}**\n"
+                f"Spread: {data['away']} ({data['spread']['away']:+}), {data['home']} ({data['spread']['home']:+})\n"
+                f"Moneyline: {data['away']} ({data['moneyline']['away']}), {data['home']} ({data['moneyline']['home']})\n"
+                f"O/U: {data['over_under']}"
+            )
+            view = MatchupBetButtonView(mid)  # keep this as your per-matchup view
+            try:
+                await interaction.user.send(embed=embed, view=view)
+            except discord.Forbidden:
+                await interaction.response.send_message(embed=create_embed("❌ Cannot send DM", "Please enable DMs to receive matchups."), ephemeral=True)
                 return
+        await interaction.response.send_message(embed=create_embed("📬 Sent", "Matchups sent to your DMs."), ephemeral=True)
 
-            for mid, data in matchups.items():
-                embed = create_embed(
-                    f"📌 Matchup #{mid}",
-                    f"**{data['away']}** @ **{data['home']}**\n"
-                    f"Spread: {data['away']} ({data['spread']['away']:+}), {data['home']} ({data['spread']['home']:+})\n"
-                    f"Moneyline: {data['away']} ({data['moneyline']['away']}), {data['home']} ({data['moneyline']['home']})\n"
-                    f"O/U: {data['over_under']}"
-                )
-                view = MatchupBetButtonView(mid)
-                try:
-                    await interaction.user.send(embed=embed, view=view)
-                except discord.Forbidden:
-                    await interaction.response.send_message(
-                        embed=create_embed("❌ Cannot send DM", "Please enable DMs to receive matchups."),
-                        ephemeral=True
-                    )
-                    return
-
-            await interaction.response.send_message(embed=create_embed("📬 Sent", "Matchups sent to your DMs."), ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(embed=create_embed("⚠️ Error", str(e)), ephemeral=True)
-
-# 9d. Bet History
 class BetHistoryButton(Button):
     def __init__(self):
         super().__init__(label="Bet History", style=discord.ButtonStyle.secondary, emoji="📜")
-
     async def callback(self, interaction: discord.Interaction):
-        try:
-            user = get_user(interaction.user.id)
-            history = user.get("bet_history", [])
-            text = "\n".join(history[-10:]) if history else "No bets placed yet."
-            await interaction.response.send_message(embed=create_embed("📜 Recent Bets", text), ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(embed=create_embed("⚠️ Error", str(e)), ephemeral=True)
+        user = get_user(interaction.user.id)
+        history = user.get("bet_history", [])
+        text = "\n".join(history[-10:]) if history else "No bets placed yet."
+        await interaction.response.send_message(embed=create_embed("📜 Recent Bets", text), ephemeral=True)
 
-# 9e. Win History
 class WinHistoryButton(Button):
     def __init__(self):
         super().__init__(label="Win History", style=discord.ButtonStyle.success, emoji="✅")
-
     async def callback(self, interaction: discord.Interaction):
-        try:
-            user = get_user(interaction.user.id)
-            wins = user.get("win_history", [])
-            text = "\n".join(wins[-10:]) if wins else "No wins yet."
-            await interaction.response.send_message(embed=create_embed("🏅 Recent Wins", text), ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(embed=create_embed("⚠️ Error", str(e)), ephemeral=True)
+        user = get_user(interaction.user.id)
+        wins = user.get("win_history", [])
+        text = "\n".join(wins[-10:]) if wins else "No wins yet."
+        await interaction.response.send_message(embed=create_embed("🏅 Recent Wins", text), ephemeral=True)
+
+class LeaderboardButton(Button):
+    def __init__(self):
+        super().__init__(label="Leaderboard", style=discord.ButtonStyle.primary, emoji="🏆")
+    async def callback(self, interaction: discord.Interaction):
+        users = load_json(USERS_FILE)
+        sorted_users = sorted(users.items(), key=lambda x: x[1]["money"], reverse=True)
+        text = ""
+        for i, (uid, data) in enumerate(sorted_users[:10], 1):
+            try:
+                member = await bot.fetch_user(int(uid))
+                wins = len(data.get("win_history", []))
+                losses = len(data.get("bet_history", [])) - wins
+                text += f"**{i}. {member.display_name}** - 💵{data['money']} | {wins}W-{losses}L\n"
+            except Exception:
+                continue
+        await interaction.response.send_message(embed=create_embed("🏆 Leaderboard (Top 10)", text), ephemeral=True)
 
 # -------------------------------
 # 10. Bet Type Menu
@@ -743,30 +725,6 @@ class FuturesButton(Button):
         super().__init__(label="Futures Bet", style=discord.ButtonStyle.success)
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_message(embed=create_embed("🔮 Futures Coming Soon", "Bet on long-term outcomes, e.g., season champion."), ephemeral=True)
-
-# -------------------------------
-# 16. Leaderboard
-# -------------------------------
-class LeaderboardButton(Button):
-    def __init__(self):
-        super().__init__(label="Leaderboard", style=discord.ButtonStyle.primary, emoji="🏆")
-
-    async def callback(self, interaction: discord.Interaction):
-        try:
-            users = load_json(USERS_FILE)
-            sorted_users = sorted(users.items(), key=lambda x: x[1]["money"], reverse=True)
-            text = ""
-            for i, (uid, data) in enumerate(sorted_users[:10], 1):
-                try:
-                    member = await bot.fetch_user(int(uid))
-                    wins = len(data.get("win_history", []))
-                    losses = len(data.get("bet_history", [])) - wins
-                    text += f"**{i}. {member.display_name}** - 💵{data['money']} | {wins}W-{losses}L\n"
-                except Exception:
-                    continue
-            await interaction.response.send_message(embed=create_embed("🏆 Leaderboard (Top 10)", text), ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(embed=create_embed("⚠️ Error", str(e)), ephemeral=True)
 
 # -------------------------------
 # 17. Dynamic Moneylines
