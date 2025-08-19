@@ -8,6 +8,7 @@ from discord.ui import View, Button, Modal, TextInput
 from datetime import datetime, timedelta
 import json
 import os
+from keep_alive import keep_alive
 
 # -------------------------------
 # Environment Variables
