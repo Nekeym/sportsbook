@@ -517,6 +517,33 @@ class MatchupsButton(Button):
         await interaction.response.send_message(embed=create_embed("📬 Sent", "Matchups sent to your DMs."), ephemeral=True)
 
 # -------------------------------
+# 9d. Bet History
+# -------------------------------
+class BetHistoryButton(Button):
+    def __init__(self):
+        super().__init__(label="Bet History", style=discord.ButtonStyle.secondary, emoji="📜")
+
+    async def callback(self, interaction: discord.Interaction):
+        user = get_user(interaction.user.id)
+        history = user.get("bet_history", [])
+        text = "\n".join(history[-10:]) if history else "No bets placed yet."
+        await interaction.response.send_message(embed=create_embed("📜 Recent Bets", text), ephemeral=True)
+
+# -------------------------------
+# 9e. Win History
+# -------------------------------
+class WinHistoryButton(Button):
+    def __init__(self):
+        super().__init__(label="Win History", style=discord.ButtonStyle.success, emoji="✅")
+
+    async def callback(self, interaction: discord.Interaction):
+        user = get_user(interaction.user.id)
+        wins = user.get("win_history", [])
+        text = "\n".join(wins[-10:]) if wins else "No wins yet."
+        await interaction.response.send_message(embed=create_embed("🏅 Recent Wins", text), ephemeral=True)
+
+
+# -------------------------------
 # 10. Bet Type Menu
 # -------------------------------
 class TypeSelectView(View):
