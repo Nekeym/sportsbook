@@ -1,4 +1,4 @@
-import discord
+ import discord
 from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput
 from datetime import datetime, timedelta
@@ -484,6 +484,17 @@ def settle_futures(results_dict):
 # -------------------------------
 # Start Bot
 # -------------------------------
+class AdminView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(FinishMatchupButton())
+        self.add_item(CreateMatchupButton())
+        self.add_item(DeleteMatchupButton())
+        self.add_item(SettleParlayButton())
+        self.add_item(SettlePropButton())
+        self.add_item(SettleFuturesButton())
+        self.add_item(ViewUserBetsButton())
+
 @bot.event
 async def on_ready():
     print(f"🚀 Logged in as {bot.user}")
@@ -498,7 +509,13 @@ async def admincommands(ctx):
     if ctx.author.id != ADMIN_ID:
         await ctx.send(embed=no_permission_embed())
         return
-    await ctx.send(embed=create_embed("⚡ Admin Menu", "Use !finishmatchup to settle a matchup."))
+
+    # Create an embed for the admin menu
+    embed = create_embed("⚡ Admin Menu", "Use the buttons below to manage all matchups and bets.")
+
+    # Send the embed with the interactive admin buttons
+    await ctx.send(embed=embed, view=AdminView())
+
 
 keep_alive()
 bot.run(TOKEN)
