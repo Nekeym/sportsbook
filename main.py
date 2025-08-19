@@ -95,7 +95,7 @@ def get_user(user_id):
             "bet_history": [],
             "win_history": []
         }
-        save_json(USERS_FILE, users)
+        # Removed save_json here to prevent overwriting existing data on restarts
     return users[uid]
 
 def update_user(user_id, data):
@@ -108,7 +108,12 @@ def change_user_money(user_id, amount):
     users = load_json(USERS_FILE)
     uid = str(user_id)
     if uid not in users:
-        get_user(user_id)
+        users[uid] = {
+            "money": 500,
+            "last_daily": "2000-01-01T00:00:00",
+            "bet_history": [],
+            "win_history": []
+        }
     users[uid]["money"] += amount
     save_json(USERS_FILE, users)
     return users[uid]["money"]
