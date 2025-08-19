@@ -1,1 +1,16 @@
-{}
+{
+    "1": {
+        "home": "Tex",
+        "away": "Tex",
+        "spread": {
+            "home": -6.5,
+            "away": 6.5
+        },
+        "moneyline": {
+            "home": -110,
+            "away": -110
+        },
+        "over_under": 55.5,
+        "bets": []
+    }
+}
