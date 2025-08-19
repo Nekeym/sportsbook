@@ -8,8 +8,6 @@ from keep_alive import keep_alive
 import base64
 import requests  # for GitHub API push
 
-print(f"Bot starting... ID: {id(bot)}")
-
 # -------------------------------
 # Bot Setup
 # -------------------------------
