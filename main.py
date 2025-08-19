@@ -771,6 +771,7 @@ class BettingView(View):
 
 @bot.command()
 async def betting(ctx):
+    print(f"!betting called by {ctx.author}")
     embed = create_embed(
         "📊 Sportsbook Portal",
         "Payouts adjust based on how many people bet towards one team.\n\nSelect an option below:"
