@@ -775,7 +775,8 @@ async def betting(ctx):
         "📊 Sportsbook Portal",
         "Payouts adjust based on how many people bet towards one team.\n\nSelect an option below:"
     )
-    await ctx.send(embed=embed, view=BettingView())
+    view = BettingView()  # only create once
+    await ctx.send(embed=embed, view=view)
     
 # -------------------------------
 # 18. Bot Launch & Run
