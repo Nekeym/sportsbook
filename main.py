@@ -460,20 +460,7 @@ async def admincommands(ctx):
     embed = create_embed("🔒 Admin Portal", f"Welcome, {ctx.author.mention}. Select an action below:")
     view = AdminView()  # Add all admin buttons here
     await ctx.send(embed=embed, view=view)
-
-# -------------------------------
-# 9. Betting Portal Buttons/View
-# -------------------------------
-class BettingView(View):
-    def __init__(self):
-        super().__init__(timeout=180)
-        self.add_item(MoneyButton())
-        self.add_item(DailyButton())
-        self.add_item(MatchupsButton())
-        self.add_item(BetHistoryButton())
-        self.add_item(WinHistoryButton())
-        self.add_item(LeaderboardButton())
-
+    
 # 9a. Money button
 class MoneyButton(Button):
     def __init__(self):
@@ -736,6 +723,19 @@ def calculate_dynamic_moneyline(matchup_id):
     matchup["moneyline"]["home"] = int(base_line * (away_bets / total))
     matchup["moneyline"]["away"] = int(base_line * (home_bets / total))
     save_json(MATCHUPS_FILE, matchups)
+
+# -------------------------------
+# 9. Betting Portal Buttons/View
+# -------------------------------
+class BettingView(View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(MoneyButton())
+        self.add_item(DailyButton())
+        self.add_item(MatchupsButton())
+        self.add_item(BetHistoryButton())
+        self.add_item(WinHistoryButton())
+        self.add_item(LeaderboardButton())
 
 @bot.command()
 async def betting(ctx):
