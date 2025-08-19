@@ -18,6 +18,13 @@
                 "type": "spread",
                 "target": "home",
                 "payout": 630
+            },
+            {
+                "user": 1085391944240332940,
+                "amount": 350,
+                "type": "spread",
+                "target": "home",
+                "payout": 508
             }
         ]
     }
