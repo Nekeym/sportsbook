@@ -5,12 +5,10 @@ from datetime import datetime, timedelta
 import os
 import json
 from keep_alive import keep_alive  # keep_alive.py in same folder
-from dotenv import load_dotenv
 
 # -------------------------------
 # Load environment variables
 # -------------------------------
-load_dotenv()
 TOKEN = os.getenv("TOKENFORBOTHERE")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
