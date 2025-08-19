@@ -1,16 +1,1 @@
-{
-    "2": {
-        "home": "Sonder",
-        "away": "Kolton",
-        "spread": {
-            "home": -7.5,
-            "away": 7.5
-        },
-        "moneyline": {
-            "home": -110,
-            "away": -110
-        },
-        "over_under": 65.5,
-        "bets": []
-    }
-}
+{}
