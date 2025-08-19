@@ -1,1 +1,16 @@
-{}
+{
+    "1": {
+        "home": "Oklahoma",
+        "away": "Juno",
+        "spread": {
+            "home": -6.5,
+            "away": 6.5
+        },
+        "moneyline": {
+            "home": -110,
+            "away": -110
+        },
+        "over_under": 69.5,
+        "bets": []
+    }
+}
