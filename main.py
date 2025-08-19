@@ -454,7 +454,7 @@ class DeleteMatchupButton(Button):
                 await interaction.response.send_message(embed=create_embed("🗑️ Matchup Deleted", "All bets refunded."), ephemeral=True)
 
 # -------------------------------
-# 8. Admin Commands Portal
+# Safe Admin Commands
 # -------------------------------
 @bot.command()
 async def admincommands(ctx):
@@ -462,8 +462,11 @@ async def admincommands(ctx):
         await ctx.send(embed=no_permission_embed())
         return
 
-    embed = create_embed("🔒 Admin Portal", f"Welcome, {ctx.author.mention}. Select an action below:")
-    view = AdminView()  # Add all admin buttons here
+    embed = create_embed(
+        "🔒 Admin Portal",
+        f"Welcome, {ctx.author.mention}. Select an action below:"
+    )
+    view = AdminView()  # new instance every call
     await ctx.send(embed=embed, view=view)
     
 # 9a. Money button
@@ -769,14 +772,19 @@ class BettingView(View):
         self.add_item(WinHistoryButton())
         self.add_item(LeaderboardButton())
 
+# -------------------------------
+# Safe Betting Portal
+# -------------------------------
 @bot.command()
 async def betting(ctx):
-    print(f"!betting called by {ctx.author}")
+    if ctx.author.bot:  # Ignore bots
+        return
+
     embed = create_embed(
         "📊 Sportsbook Portal",
         "Payouts adjust based on how many people bet towards one team.\n\nSelect an option below:"
     )
-    view = BettingView()  # only create once
+    view = BettingView()  # new instance every call
     await ctx.send(embed=embed, view=view)
     
 # -------------------------------
