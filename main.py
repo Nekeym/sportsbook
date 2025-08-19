@@ -211,88 +211,92 @@ async def admincommands(ctx):
 
                 await interaction.response.send_modal(MatchupModal())
 
-        # Button 2: Finish Matchup
-        class FinishMatchup(Button):
-            def __init__(self):
-                super().__init__(label="Finish Matchup", style=discord.ButtonStyle.primary)
+       # Button 2: Finish Matchup
+class FinishMatchup(Button):
+    def __init__(self):
+        super().__init__(label="Finish Matchup", style=discord.ButtonStyle.primary)
 
-            async def callback(self, interaction: discord.Interaction):
-                if interaction.user.id != ADMIN_ID:
-                    await interaction.response.send_message(embed=no_permission_embed(), ephemeral=True)
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != ADMIN_ID:
+            await interaction.response.send_message(embed=no_permission_embed(), ephemeral=True)
+            return
+
+        class FinishModal(Modal, title="Finish Matchup"):
+            match_id = TextInput(label="Matchup ID")
+            winner = TextInput(label="Winning Spread (home or away)")
+            ou_result = TextInput(label="O/U Result (over or under)")
+
+            async def on_submit(self, interaction: discord.Interaction):
+                matchups = load_json(MATCHUPS_FILE)
+                mid = self.match_id.value.strip()
+                if mid not in matchups:
+                    await interaction.response.send_message(embed=create_embed("⚠️ Matchup Not Found", color=discord.Color.red()), ephemeral=True)
                     return
 
-                class FinishModal(Modal, title="Finish Matchup"):
-                    match_id = TextInput(label="Matchup ID")
-                    winner = TextInput(label="Winning Spread (home or away)")
-                    ou_result = TextInput(label="O/U Result (over or under)")
+                match = matchups[mid]
+                winner_key = self.winner.value.strip().lower()
+                if winner_key not in ("home", "away"):
+                    await interaction.response.send_message(embed=create_embed("⚠️ Invalid Winner", "Winner must be 'home' or 'away'."), ephemeral=True)
+                    return
 
-                    async def on_submit(self, interaction: discord.Interaction):
-                        matchups = load_json(MATCHUPS_FILE)
-                        mid = self.match_id.value.strip()
-                        if mid not in matchups:
-                            await interaction.response.send_message(embed=create_embed("⚠️ Matchup Not Found", color=discord.Color.red()), ephemeral=True)
-                            return
-                        match = matchups[mid]
-                        winner_key = self.winner.value.strip().lower()
-                        if winner_key not in ("home", "away"):
-                            await interaction.response.send_message(embed=create_embed("⚠️ Invalid Winner", "Winner must be 'home' or 'away'."), ephemeral=True)
-                            return
-                        ou_res = self.ou_result.value.strip().lower()
-                        if ou_res not in ("over", "under"):
-                            await interaction.response.send_message(embed=create_embed("⚠️ Invalid O/U Result", "O/U result must be 'over' or 'under'."), ephemeral=True)
-                            return
+                ou_res = self.ou_result.value.strip().lower()
+                if ou_res not in ("over", "under"):
+                    await interaction.response.send_message(embed=create_embed("⚠️ Invalid O/U Result", "O/U result must be 'over' or 'under'."), ephemeral=True)
+                    return
 
-                        # Prepare payout summary list
-                        payout_messages = []
+                # Payout summary
+                payout_messages = []
+                users = load_json(USERS_FILE)
 
-                        for bet in match["bets"]:
-                            user = bet["user"]
-                            bet_type = bet["type"]
-                            target = bet["target"]
-                            amount = bet["amount"]
-                            result = "LOST"
+                for bet in match["bets"]:
+                    user = bet["user"]
+                    bet_type = bet["type"]
+                    target = bet["target"]
+                    amount = bet["amount"]
+                    result = "LOST"
 
-                            if bet_type == "spread" and target == winner_key:
-                                change_user_money(user, bet["payout"])
-                                result = "WON"
-                                payout_messages.append(f"<@{user}> won 💵{bet['payout']} on spread bet ({target.upper()})")
-                            elif bet_type == "ou" and target.lower() == ou_res:
-                                change_user_money(user, bet["payout"])
-                                result = "WON"
-                                payout_messages.append(f"<@{user}> won 💵{bet['payout']} on O/U bet ({target.upper()})")
+                    if bet_type == "spread" and target == winner_key:
+                        change_user_money(user, bet["payout"])
+                        result = "WON"
+                        payout_messages.append(f"<@{user}> won 💵{bet['payout']} on spread bet ({target.upper()})")
 
-                            users = load_json(USERS_FILE)
-                            uid = str(user)
-                            if uid not in users:
-                                users[uid] = {
-                                    "money": 500,
-                                    "last_daily": "2000-01-01T00:00:00",
-                                    "bet_history": [],
-                                    "win_history": []
-                                }
+                    elif bet_type == "ou" and target.lower() == ou_res:
+                        change_user_money(user, bet["payout"])
+                        result = "WON"
+                        payout_messages.append(f"<@{user}> won 💵{bet['payout']} on O/U bet ({target.upper()})")
 
-                            if bet_type == "spread":
-                                desc = f"Spread bet on {target.upper()}"
-                            else:
-                                desc = f"O/U bet on {target.upper()}"
+                    # Make sure user exists in file
+                    uid = str(user)
+                    if uid not in users:
+                        users[uid] = {
+                            "money": 500,
+                            "last_daily": "2000-01-01T00:00:00",
+                            "bet_history": [],
+                            "win_history": []
+                        }
 
-                            entry = f"{datetime.utcnow().strftime('%m/%d %H:%M')} | {desc} | {result}"
-                            users[uid].setdefault("win_history", []).append(entry)
-                            save_json(USERS_FILE, users)
+                    # Record outcome once
+                    desc = "Spread bet" if bet_type == "spread" else "O/U bet"
+                    entry = f"{datetime.utcnow().strftime('%m/%d %H:%M')} | {desc} on {target.upper()} | {result}"
+                    users[uid].setdefault("win_history", []).append(entry)
 
-                        # Send payout summary to payout channel
-                        payout_channel = interaction.guild.get_channel(PAYOUT_CHANNEL_ID)
-                        if payout_channel and payout_messages:
-                            embed = discord.Embed(title=f"Payouts for Matchup {mid}", color=discord.Color.green())
-                            embed.description = "\n".join(payout_messages)
-                            await payout_channel.send(embed=embed)
+                # Save users only once after loop
+                save_json(USERS_FILE, users)
 
-                        # Finally delete the matchup and save
-                        del matchups[mid]
-                        save_json(MATCHUPS_FILE, matchups)
-                        await interaction.response.send_message(embed=create_embed("✅ Matchup Settled", "All bets processed."), ephemeral=True)
+                # Send payout summary
+                payout_channel = interaction.guild.get_channel(PAYOUT_CHANNEL_ID)
+                if payout_channel and payout_messages:
+                    embed = discord.Embed(title=f"Payouts for Matchup {mid}", color=discord.Color.green())
+                    embed.description = "\n".join(payout_messages)
+                    await payout_channel.send(embed=embed)
 
-                await interaction.response.send_modal(FinishModal())
+                # Delete matchup and save
+                del matchups[mid]
+                save_json(MATCHUPS_FILE, matchups)
+                await interaction.response.send_message(embed=create_embed("✅ Matchup Settled", "All bets processed."), ephemeral=True)
+
+        await interaction.response.send_modal(FinishModal())
+
 
         # Button 3: Add Money To User
         class AddMoneyToUser(Button):
