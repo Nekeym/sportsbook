@@ -742,4 +742,4 @@ def calculate_dynamic_moneyline(matchup_id):
 # -------------------------------
 print("🚀 Bot Starting...")
 keep_alive()  # if using Flask/uptime method
-bot.run("TOKENFORBOTHERE")
+bot.run(TOKEN)
