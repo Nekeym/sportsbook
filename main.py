@@ -10,7 +10,7 @@ import asyncio
 # -----------------------------
 # CONFIGURATION & CONSTANTS
 # -----------------------------
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+TOKEN = os.getenv("TOKENFORBOTHERE")
 PREFIX = "!"
 COOLDOWN_HOURS = 24
 DAILY_CLAIM_AMOUNT = 25
