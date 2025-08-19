@@ -747,7 +747,7 @@ class FuturesButton(Button):
 # -------------------------------
 # 16. Leaderboard
 # -------------------------------
-cclass LeaderboardButton(Button):
+class LeaderboardButton(Button):
     def __init__(self):
         super().__init__(label="Leaderboard", style=discord.ButtonStyle.primary, emoji="🏆")
 
