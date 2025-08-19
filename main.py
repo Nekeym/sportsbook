@@ -759,3 +759,7 @@ class AmountModal(Modal):
 
 async def get_bet_amount(interaction: discord.Interaction, matchup_id, bet_type, target):
     await interaction.response.send_modal(AmountModal(matchup_id, bet_type, target))
+
+print("Starting bot...")
+keep_alive()
+bot.run(TOKEN)
