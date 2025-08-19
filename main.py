@@ -450,22 +450,6 @@ class DeleteMatchupButton(Button):
                 del matchups[mid]
                 save_json(MATCHUPS_FILE, matchups)
                 await interaction.response.send_message(embed=create_embed("🗑️ Matchup Deleted", "All bets refunded."), ephemeral=True)
-
-# -------------------------------
-# Safe Admin Commands
-# -------------------------------
-@bot.command()
-async def admincommands(ctx):
-    if ctx.author.id != ADMIN_ID:
-        await ctx.send(embed=no_permission_embed())
-        return
-
-    embed = create_embed(
-        "🔒 Admin Portal",
-        f"Welcome, {ctx.author.mention}. Select an action below:"
-    )
-    view = AdminView()  # new instance every call
-    await ctx.send(embed=embed, view=view)
     
 # -------------------------------
 # User Portal Buttons
