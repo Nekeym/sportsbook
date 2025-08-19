@@ -217,61 +217,60 @@ class FinishMatchupButton(Button):
             await interaction.response.send_message(embed=no_permission_embed(), ephemeral=True)
             return
 
-        class FinishModal(Modal, title="Finish Matchup"):
-            match_id = TextInput(label="Matchup ID")
-            winner = TextInput(label="Winning Spread (home/away)")
-            ou_result = TextInput(label="O/U Result (over/under)")
+        try:
+            class FinishModal(Modal, title="Finish Matchup"):
+                match_id = TextInput(label="Matchup ID", placeholder="e.g. 1")
+                winner = TextInput(label="Winning Spread (home/away)")
+                ou_result = TextInput(label="O/U Result (over/under)")
 
-            async def on_submit(self, interaction: discord.Interaction):
-                matchups = load_json(MATCHUPS_FILE)
-                mid = self.match_id.value.strip()
-                if mid not in matchups:
-                    await interaction.response.send_message(embed=create_embed("❌ Matchup Not Found"), ephemeral=True)
-                    return
+                async def on_submit(self, interaction: discord.Interaction):
+                    try:
+                        matchups = load_json(MATCHUPS_FILE)
+                        mid = self.match_id.value.strip()
+                        if mid not in matchups:
+                            await interaction.response.send_message(embed=create_embed("❌ Matchup Not Found"), ephemeral=True)
+                            return
 
-                match = matchups[mid]
-                winner_key = self.winner.value.strip().lower()
-                ou_res = self.ou_result.value.strip().lower()
+                        winner_key = self.winner.value.strip().lower()
+                        ou_res = self.ou_result.value.strip().lower()
 
-                if winner_key not in ("home","away"):
-                    await interaction.response.send_message(embed=create_embed("⚠️ Invalid Winner"), ephemeral=True)
-                    return
-                if ou_res not in ("over","under"):
-                    await interaction.response.send_message(embed=create_embed("⚠️ Invalid O/U Result"), ephemeral=True)
-                    return
+                        if winner_key not in ("home","away") or ou_res not in ("over","under"):
+                            await interaction.response.send_message(embed=create_embed("⚠️ Invalid Input"), ephemeral=True)
+                            return
 
-                payout_messages = []
-                for bet in match["bets"]:
-                    user_id = bet["user"]
-                    bet_type = bet["type"]
-                    target = bet["target"]
-                    amount = bet["amount"]
-                    payout = bet["payout"]
-                    result_text = "LOST"
+                        match = matchups[mid]
+                        payout_messages = []
 
-                    if bet_type == "spread" and target == winner_key:
-                        change_user_money(user_id, payout)
-                        log_user_result(user_id, f"{datetime.utcnow().strftime('%m/%d %H:%M')} | Spread {target.upper()} WON | 💵{payout}")
-                        payout_messages.append(f"<@{user_id}> won 💵{payout} on SPREAD ({target.upper()})")
-                        result_text = "WON"
+                        for bet in match["bets"]:
+                            user_id = bet["user"]
+                            bet_type = bet["type"]
+                            target = bet["target"]
+                            amount = bet["amount"]
+                            payout = bet["payout"]
+                            result_text = "LOST"
 
-                    elif bet_type == "ou" and target == ou_res:
-                        change_user_money(user_id, payout)
-                        log_user_result(user_id, f"{datetime.utcnow().strftime('%m/%d %H:%M')} | O/U {target.upper()} WON | 💵{payout}")
-                        payout_messages.append(f"<@{user_id}> won 💵{payout} on O/U ({target.upper()})")
-                        result_text = "WON"
+                            if (bet_type == "spread" and target == winner_key) or (bet_type == "ou" and target == ou_res):
+                                change_user_money(user_id, payout)
+                                log_user_result(user_id, f"{datetime.utcnow().strftime('%m/%d %H:%M')} | {bet_type.upper()} {target.upper()} WON | 💵{payout}")
+                                payout_messages.append(f"<@{user_id}> won 💵{payout} on {bet_type.upper()} ({target.upper()})")
+                                result_text = "WON"
+                            else:
+                                log_user_result(user_id, f"{datetime.utcnow().strftime('%m/%d %H:%M')} | {bet_type.upper()} {target.upper()} LOST | 💵{amount}")
 
-                    else:
-                        log_user_result(user_id, f"{datetime.utcnow().strftime('%m/%d %H:%M')} | {bet_type.upper()} {target.upper()} LOST | 💵{amount}")
+                        payout_channel = interaction.guild.get_channel(PAYOUT_CHANNEL_ID)
+                        if payout_channel and payout_messages:
+                            await payout_channel.send(embed=create_embed(f"Payouts for Matchup {mid}", "\n".join(payout_messages), color=discord.Color.green()))
 
-                payout_channel = interaction.guild.get_channel(PAYOUT_CHANNEL_ID)
-                if payout_channel and payout_messages:
-                    embed = create_embed(f"Payouts for Matchup {mid}", "\n".join(payout_messages), color=discord.Color.green())
-                    await payout_channel.send(embed=embed)
+                        del matchups[mid]
+                        save_json(MATCHUPS_FILE, matchups)
+                        await interaction.response.send_message(embed=create_embed("✅ Matchup Settled", "All bets processed."), ephemeral=True)
 
-                del matchups[mid]
-                save_json(MATCHUPS_FILE, matchups)
-                await interaction.response.send_message(embed=create_embed("✅ Matchup Settled", "All bets processed."), ephemeral=True)
+                    except Exception as e:
+                        await interaction.response.send_message(embed=create_embed("⚠️ Error", f"{e}"), ephemeral=True)
+
+            await interaction.response.send_modal(FinishModal())
+        except Exception as e:
+            await interaction.response.send_message(embed=create_embed("⚠️ Error Launching Modal", f"{e}"), ephemeral=True)
 
 print("✅ Part 2 loaded: Admin buttons and matchup management")
 
@@ -287,26 +286,31 @@ class AddMoneyToUserButton(Button):
             await interaction.response.send_message(embed=no_permission_embed(), ephemeral=True)
             return
 
-        class AddMoneyModal(Modal, title="Add Money To User"):
-            user_id_input = TextInput(label="User ID", placeholder="Discord User ID")
-            amount = TextInput(label="Amount", placeholder="e.g. 100")
+        try:
+            class AddMoneyModal(Modal, title="Add Money To User"):
+                user_id_input = TextInput(label="User ID", placeholder="Discord User ID")
+                amount = TextInput(label="Amount", placeholder="e.g. 100")
 
-            async def on_submit(self, interaction: discord.Interaction):
-                try:
-                    user_id_int = int(self.user_id_input.value.strip())
-                    amount_int = int(self.amount.value.strip())
-                    if amount_int <= 0:
-                        raise ValueError
-                except:
-                    await interaction.response.send_message(embed=create_embed("⚠️ Invalid Input"), ephemeral=True)
-                    return
+                async def on_submit(self, interaction: discord.Interaction):
+                    try:
+                        user_id_int = int(self.user_id_input.value.strip())
+                        amount_int = int(self.amount.value.strip())
+                        if amount_int <= 0:
+                            raise ValueError("Amount must be positive.")
+                    except:
+                        await interaction.response.send_message(embed=create_embed("⚠️ Invalid Input"), ephemeral=True)
+                        return
 
-                get_user(user_id_int)
-                change_user_money(user_id_int, amount_int)
-                await interaction.response.send_message(
-                    embed=create_embed("✅ Money Added", f"Added 💵{amount_int} to <@{user_id_int}>."),
-                    ephemeral=True
-                )
+                    get_user(user_id_int)
+                    change_user_money(user_id_int, amount_int)
+                    await interaction.response.send_message(
+                        embed=create_embed("✅ Money Added", f"Added 💵{amount_int} to <@{user_id_int}>."),
+                        ephemeral=True
+                    )
+
+            await interaction.response.send_modal(AddMoneyModal())
+        except Exception as e:
+            await interaction.response.send_message(embed=create_embed("⚠️ Error Launching Modal", f"{e}"), ephemeral=True)
 
 # -------------------------------
 # 4. Add Money to All Users
@@ -320,25 +324,30 @@ class AddMoneyToAllButton(Button):
             await interaction.response.send_message(embed=no_permission_embed(), ephemeral=True)
             return
 
-        class AddAllModal(Modal, title="Add Money To All Users"):
-            amount = TextInput(label="Amount", placeholder="e.g. 50")
+        try:
+            class AddAllModal(Modal, title="Add Money To All Users"):
+                amount = TextInput(label="Amount", placeholder="e.g. 50")
 
-            async def on_submit(self, interaction: discord.Interaction):
-                try:
-                    amount_int = int(self.amount.value.strip())
-                    if amount_int <= 0:
-                        raise ValueError
-                except:
-                    await interaction.response.send_message(embed=create_embed("⚠️ Invalid Amount"), ephemeral=True)
-                    return
+                async def on_submit(self, interaction: discord.Interaction):
+                    try:
+                        amount_int = int(self.amount.value.strip())
+                        if amount_int <= 0:
+                            raise ValueError("Amount must be positive.")
+                    except:
+                        await interaction.response.send_message(embed=create_embed("⚠️ Invalid Amount"), ephemeral=True)
+                        return
 
-                count = 0
-                for member in interaction.guild.members:
-                    if not member.bot:
-                        get_user(member.id)
-                        change_user_money(member.id, amount_int)
-                        count += 1
-                await interaction.response.send_message(embed=create_embed("✅ Mass Payment", f"Added 💵{amount_int} to {count} users."), ephemeral=True)
+                    count = 0
+                    for member in interaction.guild.members:
+                        if not member.bot:
+                            get_user(member.id)
+                            change_user_money(member.id, amount_int)
+                            count += 1
+                    await interaction.response.send_message(embed=create_embed("✅ Mass Payment", f"Added 💵{amount_int} to {count} users."), ephemeral=True)
+
+            await interaction.response.send_modal(AddAllModal())
+        except Exception as e:
+            await interaction.response.send_message(embed=create_embed("⚠️ Error Launching Modal", f"{e}"), ephemeral=True)
 
 # -------------------------------
 # 5. Remove Money From User
@@ -352,33 +361,38 @@ class RemoveMoneyFromUserButton(Button):
             await interaction.response.send_message(embed=no_permission_embed(), ephemeral=True)
             return
 
-        class RemoveMoneyModal(Modal, title="Remove Money From User"):
-            user_id_input = TextInput(label="User ID", placeholder="Discord User ID")
-            amount = TextInput(label="Amount to Remove", placeholder="e.g. 100")
+        try:
+            class RemoveMoneyModal(Modal, title="Remove Money From User"):
+                user_id_input = TextInput(label="User ID", placeholder="Discord User ID")
+                amount = TextInput(label="Amount to Remove", placeholder="e.g. 100")
 
-            async def on_submit(self, interaction: discord.Interaction):
-                try:
-                    user_id_int = int(self.user_id_input.value.strip())
-                    amount_int = int(self.amount.value.strip())
-                    if amount_int <= 0:
-                        raise ValueError
-                except:
-                    await interaction.response.send_message(embed=create_embed("⚠️ Invalid Input"), ephemeral=True)
-                    return
+                async def on_submit(self, interaction: discord.Interaction):
+                    try:
+                        user_id_int = int(self.user_id_input.value.strip())
+                        amount_int = int(self.amount.value.strip())
+                        if amount_int <= 0:
+                            raise ValueError
+                    except:
+                        await interaction.response.send_message(embed=create_embed("⚠️ Invalid Input"), ephemeral=True)
+                        return
 
-                user_data = get_user(user_id_int)
-                if user_data["money"] < amount_int:
+                    user_data = get_user(user_id_int)
+                    if user_data["money"] < amount_int:
+                        await interaction.response.send_message(
+                            embed=create_embed("🛑 Not Enough Money", f"User only has 💵{user_data['money']}."),
+                            ephemeral=True
+                        )
+                        return
+
+                    change_user_money(user_id_int, -amount_int)
                     await interaction.response.send_message(
-                        embed=create_embed("🛑 Not Enough Money", f"User only has 💵{user_data['money']}."),
+                        embed=create_embed("✅ Money Removed", f"Removed 💵{amount_int} from <@{user_id_int}>."),
                         ephemeral=True
                     )
-                    return
 
-                change_user_money(user_id_int, -amount_int)
-                await interaction.response.send_message(
-                    embed=create_embed("✅ Money Removed", f"Removed 💵{amount_int} from <@{user_id_int}>."),
-                    ephemeral=True
-                )
+            await interaction.response.send_modal(RemoveMoneyModal())
+        except Exception as e:
+            await interaction.response.send_message(embed=create_embed("⚠️ Error Launching Modal", f"{e}"), ephemeral=True)
 
 # -------------------------------
 # 6. Delete User Bet
@@ -392,32 +406,39 @@ class DeleteUserBetButton(Button):
             await interaction.response.send_message(embed=no_permission_embed(), ephemeral=True)
             return
 
-        class DeleteBetModal(Modal, title="Delete User Bet"):
-            match_id = TextInput(label="Matchup ID")
-            user_id_input = TextInput(label="User ID")
+        try:
+            class DeleteBetModal(Modal, title="Delete User Bet"):
+                match_id = TextInput(label="Matchup ID")
+                user_id_input = TextInput(label="User ID")
 
-            async def on_submit(self, interaction: discord.Interaction):
-                matchups = load_json(MATCHUPS_FILE)
-                mid = self.match_id.value.strip()
-                try:
-                    user_id_int = int(self.user_id_input.value.strip())
-                except:
-                    await interaction.response.send_message(embed=create_embed("⚠️ Invalid User ID"), ephemeral=True)
-                    return
+                async def on_submit(self, interaction: discord.Interaction):
+                    try:
+                        user_id_int = int(self.user_id_input.value.strip())
+                    except:
+                        await interaction.response.send_message(embed=create_embed("⚠️ Invalid User ID"), ephemeral=True)
+                        return
 
-                if mid not in matchups:
-                    await interaction.response.send_message(embed=create_embed("❌ Matchup Not Found"), ephemeral=True)
-                    return
+                    matchups = load_json(MATCHUPS_FILE)
+                    mid = self.match_id.value.strip()
 
-                match = matchups[mid]
-                original_len = len(match["bets"])
-                match["bets"] = [b for b in match["bets"] if b["user"] != user_id_int]
-                if len(match["bets"]) == original_len:
-                    await interaction.response.send_message(embed=create_embed("ℹ️ Bet Not Found"), ephemeral=True)
-                    return
+                    if mid not in matchups:
+                        await interaction.response.send_message(embed=create_embed("❌ Matchup Not Found"), ephemeral=True)
+                        return
 
-                save_json(MATCHUPS_FILE, matchups)
-                await interaction.response.send_message(embed=create_embed("✅ Bet Deleted", f"Deleted bet by <@{user_id_int}> on matchup {mid}."), ephemeral=True)
+                    match = matchups[mid]
+                    original_len = len(match.get("bets", []))
+                    match["bets"] = [b for b in match.get("bets", []) if b["user"] != user_id_int]
+
+                    if len(match["bets"]) == original_len:
+                        await interaction.response.send_message(embed=create_embed("ℹ️ Bet Not Found"), ephemeral=True)
+                        return
+
+                    save_json(MATCHUPS_FILE, matchups)
+                    await interaction.response.send_message(embed=create_embed("✅ Bet Deleted", f"Deleted bet by <@{user_id_int}> on matchup {mid}."), ephemeral=True)
+
+            await interaction.response.send_modal(DeleteBetModal())
+        except Exception as e:
+            await interaction.response.send_message(embed=create_embed("⚠️ Error Launching Modal", f"{e}"), ephemeral=True)
 
 print("✅ Part 3 loaded: Money management and deletion buttons")
 
@@ -433,24 +454,30 @@ class DeleteMatchupButton(Button):
             await interaction.response.send_message(embed=no_permission_embed(), ephemeral=True)
             return
 
-        class DeleteModal(Modal, title="Delete Matchup"):
-            match_id = TextInput(label="Matchup ID")
+        try:
+            class DeleteModal(Modal, title="Delete Matchup"):
+                match_id = TextInput(label="Matchup ID")
 
-            async def on_submit(self, interaction: discord.Interaction):
-                matchups = load_json(MATCHUPS_FILE)
-                mid = self.match_id.value.strip()
-                if mid not in matchups:
-                    await interaction.response.send_message(embed=create_embed("❌ Matchup Not Found"), ephemeral=True)
-                    return
+                async def on_submit(self, interaction: discord.Interaction):
+                    matchups = load_json(MATCHUPS_FILE)
+                    mid = self.match_id.value.strip()
 
-                match = matchups[mid]
-                # Refund all bets
-                for bet in match["bets"]:
-                    change_user_money(bet["user"], bet["amount"])
-                del matchups[mid]
-                save_json(MATCHUPS_FILE, matchups)
-                await interaction.response.send_message(embed=create_embed("🗑️ Matchup Deleted", "All bets refunded."), ephemeral=True)
-    
+                    if mid not in matchups:
+                        await interaction.response.send_message(embed=create_embed("❌ Matchup Not Found"), ephemeral=True)
+                        return
+
+                    match = matchups[mid]
+                    for bet in match.get("bets", []):
+                        change_user_money(bet["user"], bet["amount"])
+
+                    del matchups[mid]
+                    save_json(MATCHUPS_FILE, matchups)
+                    await interaction.response.send_message(embed=create_embed("🗑️ Matchup Deleted", "All bets refunded."), ephemeral=True)
+
+            await interaction.response.send_modal(DeleteModal())
+        except Exception as e:
+            await interaction.response.send_message(embed=create_embed("⚠️ Error Launching Modal", f"{e}"), ephemeral=True)
+
 # -------------------------------
 # User Portal Buttons
 # -------------------------------
@@ -459,56 +486,77 @@ class DeleteMatchupButton(Button):
 class MoneyButton(Button):
     def __init__(self):
         super().__init__(label="Money", style=discord.ButtonStyle.success, emoji="💵")
+
     async def callback(self, interaction: discord.Interaction):
-        user_data = get_user(interaction.user.id)
-        await interaction.response.send_message(
-            embed=create_embed("💰 Account Balance", f"You currently have 💵{user_data['money']} to bet with."),
-            ephemeral=True
-        )
+        try:
+            user_data = get_user(interaction.user.id)
+            await interaction.response.send_message(
+                embed=create_embed("💰 Account Balance", f"You currently have 💵{user_data['money']} to bet with."),
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.response.send_message(embed=create_embed("⚠️ Error", str(e)), ephemeral=True)
 
 # 9b. Daily claim
 class DailyButton(Button):
     def __init__(self):
         super().__init__(label="Daily Grab", style=discord.ButtonStyle.primary, emoji="🟣")
+
     async def callback(self, interaction: discord.Interaction):
-        user_data = get_user(interaction.user.id)
-        last_claim = datetime.fromisoformat(user_data["last_daily"])
-        if datetime.utcnow() - last_claim >= timedelta(hours=24):
-            change_user_money(interaction.user.id, 25)
-            update_user(interaction.user.id, {"last_daily": datetime.utcnow().isoformat()})
-            await interaction.response.send_message(embed=create_embed("✅ Daily Claimed", "You received 💵25! Come back in 24 hours."), ephemeral=True)
-        else:
-            next_time = last_claim + timedelta(hours=24)
-            wait_time = next_time - datetime.utcnow()
-            hours, remainder = divmod(wait_time.total_seconds(), 3600)
-            minutes = remainder // 60
-            await interaction.response.send_message(embed=create_embed("⏳ Not Ready Yet", f"Come back in {int(hours)}h {int(minutes)}m to claim again."), ephemeral=True)
+        try:
+            user_data = get_user(interaction.user.id)
+            last_claim = datetime.fromisoformat(user_data["last_daily"])
+            now = datetime.utcnow()
+
+            if now - last_claim >= timedelta(hours=24):
+                change_user_money(interaction.user.id, 25)
+                update_user(interaction.user.id, {"last_daily": now.isoformat()})
+                await interaction.response.send_message(embed=create_embed("✅ Daily Claimed", "You received 💵25! Come back in 24 hours."), ephemeral=True)
+            else:
+                next_time = last_claim + timedelta(hours=24)
+                wait_time = next_time - now
+                hours, remainder = divmod(wait_time.total_seconds(), 3600)
+                minutes = remainder // 60
+                await interaction.response.send_message(
+                    embed=create_embed("⏳ Not Ready Yet", f"Come back in {int(hours)}h {int(minutes)}m to claim again."),
+                    ephemeral=True
+                )
+        except Exception as e:
+            await interaction.response.send_message(embed=create_embed("⚠️ Error", str(e)), ephemeral=True)
 
 # 9c. Matchups button
 class MatchupsButton(Button):
     def __init__(self):
         super().__init__(label="Matchups", style=discord.ButtonStyle.secondary, emoji="🤎")
-    async def callback(self, interaction: discord.Interaction):
-        matchups = load_json(MATCHUPS_FILE)
-        if not matchups:
-            await interaction.response.send_message(embed=create_embed("📭 No Matchups", "No matchups available right now."), ephemeral=True)
-            return
 
-        for mid, data in matchups.items():
-            embed = create_embed(
-                f"📌 Matchup #{mid}",
-                f"**{data['away']}** @ **{data['home']}**\n"
-                f"Spread: {data['away']} ({data['spread']['away']:+}), {data['home']} ({data['spread']['home']:+})\n"
-                f"Moneyline: {data['away']} ({data['moneyline']['away']}), {data['home']} ({data['moneyline']['home']})\n"
-                f"O/U: {data['over_under']}"
-            )
-            view = MatchupBetButtonView(mid)
-            try:
-                await interaction.user.send(embed=embed, view=view)
-            except discord.Forbidden:
-                await interaction.response.send_message(embed=create_embed("❌ Cannot send DM", "Please enable DMs to receive matchups."), ephemeral=True)
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            matchups = load_json(MATCHUPS_FILE)
+            if not matchups:
+                await interaction.response.send_message(embed=create_embed("📭 No Matchups", "No matchups available right now."), ephemeral=True)
                 return
-        await interaction.response.send_message(embed=create_embed("📬 Sent", "Matchups sent to your DMs."), ephemeral=True)
+
+            for mid, data in matchups.items():
+                embed = create_embed(
+                    f"📌 Matchup #{mid}",
+                    f"**{data['away']}** @ **{data['home']}**\n"
+                    f"Spread: {data['away']} ({data['spread']['away']:+}), {data['home']} ({data['spread']['home']:+})\n"
+                    f"Moneyline: {data['away']} ({data['moneyline']['away']}), {data['home']} ({data['moneyline']['home']})\n"
+                    f"O/U: {data['over_under']}"
+                )
+                view = MatchupBetButtonView(mid)
+                try:
+                    await interaction.user.send(embed=embed, view=view)
+                except discord.Forbidden:
+                    await interaction.response.send_message(
+                        embed=create_embed("❌ Cannot send DM", "Please enable DMs to receive matchups."),
+                        ephemeral=True
+                    )
+                    return
+
+            await interaction.response.send_message(embed=create_embed("📬 Sent", "Matchups sent to your DMs."), ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(embed=create_embed("⚠️ Error", str(e)), ephemeral=True)
 
 # 9d. Bet History
 class BetHistoryButton(Button):
@@ -516,10 +564,13 @@ class BetHistoryButton(Button):
         super().__init__(label="Bet History", style=discord.ButtonStyle.secondary, emoji="📜")
 
     async def callback(self, interaction: discord.Interaction):
-        user = get_user(interaction.user.id)
-        history = user.get("bet_history", [])
-        text = "\n".join(history[-10:]) if history else "No bets placed yet."
-        await interaction.response.send_message(embed=create_embed("📜 Recent Bets", text), ephemeral=True)
+        try:
+            user = get_user(interaction.user.id)
+            history = user.get("bet_history", [])
+            text = "\n".join(history[-10:]) if history else "No bets placed yet."
+            await interaction.response.send_message(embed=create_embed("📜 Recent Bets", text), ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(embed=create_embed("⚠️ Error", str(e)), ephemeral=True)
 
 # 9e. Win History
 class WinHistoryButton(Button):
@@ -527,10 +578,13 @@ class WinHistoryButton(Button):
         super().__init__(label="Win History", style=discord.ButtonStyle.success, emoji="✅")
 
     async def callback(self, interaction: discord.Interaction):
-        user = get_user(interaction.user.id)
-        wins = user.get("win_history", [])
-        text = "\n".join(wins[-10:]) if wins else "No wins yet."
-        await interaction.response.send_message(embed=create_embed("🏅 Recent Wins", text), ephemeral=True)
+        try:
+            user = get_user(interaction.user.id)
+            wins = user.get("win_history", [])
+            text = "\n".join(wins[-10:]) if wins else "No wins yet."
+            await interaction.response.send_message(embed=create_embed("🏅 Recent Wins", text), ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(embed=create_embed("⚠️ Error", str(e)), ephemeral=True)
 
 # -------------------------------
 # 10. Bet Type Menu
@@ -693,22 +747,26 @@ class FuturesButton(Button):
 # -------------------------------
 # 16. Leaderboard
 # -------------------------------
-class LeaderboardButton(Button):
+cclass LeaderboardButton(Button):
     def __init__(self):
         super().__init__(label="Leaderboard", style=discord.ButtonStyle.primary, emoji="🏆")
+
     async def callback(self, interaction: discord.Interaction):
-        users = load_json(USERS_FILE)
-        sorted_users = sorted(users.items(), key=lambda x: x[1]["money"], reverse=True)
-        text = ""
-        for i, (uid, data) in enumerate(sorted_users[:10], 1):
-            try:
-                member = await bot.fetch_user(int(uid))
-                wins = len(data.get("win_history", []))
-                losses = len(data.get("bet_history", [])) - wins
-                text += f"**{i}. {member.display_name}** - 💵{data['money']} | {wins}W-{losses}L\n"
-            except Exception:
-                continue
-        await interaction.response.send_message(embed=create_embed("🏆 Leaderboard (Top 10)", text), ephemeral=True)
+        try:
+            users = load_json(USERS_FILE)
+            sorted_users = sorted(users.items(), key=lambda x: x[1]["money"], reverse=True)
+            text = ""
+            for i, (uid, data) in enumerate(sorted_users[:10], 1):
+                try:
+                    member = await bot.fetch_user(int(uid))
+                    wins = len(data.get("win_history", []))
+                    losses = len(data.get("bet_history", [])) - wins
+                    text += f"**{i}. {member.display_name}** - 💵{data['money']} | {wins}W-{losses}L\n"
+                except Exception:
+                    continue
+            await interaction.response.send_message(embed=create_embed("🏆 Leaderboard (Top 10)", text), ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(embed=create_embed("⚠️ Error", str(e)), ephemeral=True)
 
 # -------------------------------
 # 17. Dynamic Moneylines
