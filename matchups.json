@@ -11,20 +11,14 @@
             "away": -110
         },
         "over_under": 69.5,
-        "bets": []
-    },
-    "2": {
-        "home": "Oregon",
-        "away": "Clemson",
-        "spread": {
-            "home": -12.5,
-            "away": 12.5
-        },
-        "moneyline": {
-            "home": -110,
-            "away": -110
-        },
-        "over_under": 65.5,
-        "bets": []
+        "bets": [
+            {
+                "user": 1085391944240332940,
+                "amount": 350,
+                "type": "spread",
+                "target": "home",
+                "payout": 630
+            }
+        ]
     }
 }
