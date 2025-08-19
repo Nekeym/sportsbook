@@ -737,6 +737,14 @@ def calculate_dynamic_moneyline(matchup_id):
     matchup["moneyline"]["away"] = int(base_line * (home_bets / total))
     save_json(MATCHUPS_FILE, matchups)
 
+@bot.command()
+async def betting(ctx):
+    embed = create_embed(
+        "📊 Sportsbook Portal",
+        "Payouts adjust based on how many people bet towards one team.\n\nSelect an option below:"
+    )
+    await ctx.send(embed=embed, view=BettingView())
+    
 # -------------------------------
 # 18. Bot Launch & Run
 # -------------------------------
