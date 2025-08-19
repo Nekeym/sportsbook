@@ -1,47 +1,4 @@
 {
-    "1": {
-        "home": "Oklahoma",
-        "away": "Juno",
-        "spread": {
-            "home": -6.5,
-            "away": 6.5
-        },
-        "moneyline": {
-            "home": -110,
-            "away": -110
-        },
-        "over_under": 69.5,
-        "bets": [
-            {
-                "user": 1085391944240332940,
-                "amount": 350,
-                "type": "spread",
-                "target": "home",
-                "payout": 630
-            },
-            {
-                "user": 1085391944240332940,
-                "amount": 350,
-                "type": "spread",
-                "target": "home",
-                "payout": 508
-            },
-            {
-                "user": 1085391944240332940,
-                "amount": 350,
-                "type": "spread",
-                "target": "home",
-                "payout": 385
-            },
-            {
-                "user": 1085391944240332940,
-                "amount": 350,
-                "type": "spread",
-                "target": "home",
-                "payout": 385
-            }
-        ]
-    },
     "2": {
         "home": "Sonder",
         "away": "Kolton",
