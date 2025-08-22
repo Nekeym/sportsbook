@@ -44,6 +44,9 @@ USERS_FILE = "users.json"
 MATCHUPS_FILE = "matchups.json"
 USERS = {}
 MATCHUPS = {}
+USERS = load_users()
+MATCHUPS = load_matchups()
+
 
 def load_users():
     try:
