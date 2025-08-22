@@ -675,6 +675,57 @@ async def on_member_join(member):
     get_user(str(member.id))
     save_users()
 
+# -----------------------------
+# Help Commands
+# -----------------------------
+
+USER_COMMANDS = {
+    "daily": "Claim your daily bonus.",
+    "balance": "Check your balance (or another user's).",
+    "history": "View your betting history (or another user's).",
+    "leaderboard": "View the leaderboard.",
+    "bet": "Place a bet on a matchup.",
+    "pending": "View pending bets.",
+    "parlay": "Create a parlay bet.",
+    "volume": "Show betting volume for a matchup.",
+    "weekly": "Check weekly challenge progress."
+}
+
+ADMIN_COMMANDS = {
+    "addmatchup": "Add a matchup (spread, over/under, prop).",
+    "editmatchup": "Edit a matchup field.",
+    "removematchup": "Remove a matchup.",
+    "settlematchup": "Settle a matchup and pay winners.",
+    "addmoney": "Add coins to a user.",
+    "removemoney": "Remove coins from a user.",
+    "lockmatchup": "Lock betting on a matchup."
+}
+
+@bot.command(name="help")
+async def user_help(ctx):
+    """List user commands."""
+    desc = "\n".join([f"• **{cmd}** — {desc}" for cmd, desc in USER_COMMANDS.items()])
+    embed = discord.Embed(
+        title="📖 User Commands",
+        description=desc,
+        color=discord.Color.blue()
+    )
+    await ctx.send(embed=embed)
+
+@bot.command(name="adminhelp")
+async def admin_help(ctx):
+    """List admin commands (admins only)."""
+    if not is_admin(ctx):
+        return await ctx.send("❌ You are not an admin.")
+
+    desc = "\n".join([f"• **{cmd}** — {desc}" for cmd, desc in ADMIN_COMMANDS.items()])
+    embed = discord.Embed(
+        title="⚡ Admin Commands",
+        description=desc,
+        color=discord.Color.red()
+    )
+    await ctx.send(embed=embed)
+
 # =============================
 # Run the Bot
 # =============================
