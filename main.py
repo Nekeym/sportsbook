@@ -16,9 +16,6 @@ ADMIN_ID = int(os.getenv("ADMIN_ID"))  # Your Discord user ID
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # (Not used by bot yet, placeholder for CI/CD if wanted)
 
 # --- Bot Config ---
-USERS_FILE = "users.json"
-MATCHUPS_FILE = "matchups.json"
-
 CURRENCY_SYMBOL = "💵"
 DAILY_CLAIM_AMOUNT = 50
 STARTING_BALANCE = 250
@@ -46,12 +43,31 @@ def run_keep_alive():
 t = threading.Thread(target=run_keep_alive)
 t.start()
 
-# --- Ensure Data Directory ---
-os.makedirs(DATA_DIR, exist_ok=True)
-if not os.path.exists(USERS_FILE):
-    with open(USERS_FILE, "w") as f: json.dump({}, f)
-if not os.path.exists(MATCHUPS_FILE):
-    with open(MATCHUPS_FILE, "w") as f: json.dump({}, f)
+# JSON files in same folder as main.py
+USERS_FILE = "users.json"
+MATCHUPS_FILE = "matchups.json"
+
+def load_users():
+    try:
+        with open(USERS_FILE, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+def save_users():
+    with open(USERS_FILE, "w") as f:
+        json.dump(USERS, f, indent=4)
+
+def load_matchups():
+    try:
+        with open(MATCHUPS_FILE, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+def save_matchups():
+    with open(MATCHUPS_FILE, "w") as f:
+        json.dump(MATCHUPS, f, indent=4)
 
 # =============================
 # Part 3 — Odds & Payout Logic
