@@ -46,24 +46,24 @@ USERS = {}
 MATCHUPS = {}
 
 def load_users():
-    global USERS
     try:
         with open(USERS_FILE, "r") as f:
-            USERS = json.load(f)
-    except FileNotFoundError:
-        USERS = {}
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
 
 def save_users():
     with open(USERS_FILE, "w") as f:
         json.dump(USERS, f, indent=4)
 
 def load_matchups():
-    global MATCHUPS
     try:
         with open(MATCHUPS_FILE, "r") as f:
-            MATCHUPS = json.load(f)
-    except FileNotFoundError:
-        MATCHUPS = {}
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
 
 def save_matchups():
     with open(MATCHUPS_FILE, "w") as f:
