@@ -1,1 +1,12 @@
-{}
+{
+    "m_958709": {
+        "id": "m_958709",
+        "type": "prop",
+        "prop_type": "choice",
+        "title": "Who Will Win The Heisman In The 2026 Season?",
+        "bets": {},
+        "locked": false,
+        "settled": false,
+        "result": null
+    }
+}
