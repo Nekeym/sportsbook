@@ -69,6 +69,21 @@ def save_matchups():
     with open(MATCHUPS_FILE, "w") as f:
         json.dump(MATCHUPS, f, indent=4)
 
+def get_user(user_id):
+    """
+    Retrieve a user from USERS dict. 
+    If the user does not exist, create a default user entry.
+    """
+    if user_id not in USERS:
+        USERS[user_id] = {
+            "balance": 0,
+            "bets": {},
+            "history": [],
+            "achievements": []
+        }
+        save_users()  # ensure the new user is saved
+    return USERS[user_id]
+
 # =============================
 # Part 3 — Odds & Payout Logic
 # =============================
