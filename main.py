@@ -688,7 +688,9 @@ USER_COMMANDS = {
     "pending": "View pending bets.",
     "parlay": "Create a parlay bet.",
     "volume": "Show betting volume for a matchup.",
-    "weekly": "Check weekly challenge progress."
+    "weekly": "Check weekly challenge progress.",
+    "props": "View all active props.",
+    "betprop": "Bet on an active prop."
 }
 
 ADMIN_COMMANDS = {
@@ -698,7 +700,9 @@ ADMIN_COMMANDS = {
     "settlematchup": "Settle a matchup and pay winners.",
     "addmoney": "Add coins to a user.",
     "removemoney": "Remove coins from a user.",
-    "lockmatchup": "Lock betting on a matchup."
+    "lockmatchup": "Lock betting on a matchup.",
+    "addprop": "Adds a prop bet.",
+    "editprop": "Edits a prop bet."
 }
 
 @bot.command(name="help")
@@ -856,6 +860,32 @@ async def settle_prop(ctx, matchup_id: str, *, result):
         description=msg,
         color=discord.Color.green()
     ))
+
+# --- User: View Active Prop Bets ---
+@bot.command(name="props")
+async def props(ctx):
+    """
+    List all currently active (unlocked & unsettled) prop bets.
+    """
+    active_props = [m for m in MATCHUPS.values() if m["type"] == "prop" and not m["locked"] and not m["settled"]]
+    
+    if not active_props:
+        return await ctx.send(embed=discord.Embed(
+            title="📋 Active Prop Bets",
+            description="No active prop bets at the moment.",
+            color=discord.Color.orange()
+        ))
+
+    desc = ""
+    for m in active_props:
+        desc += f"• {m['id']} — {m['title']} ({m.get('prop_type', 'Choice')})\n"
+
+    embed = discord.Embed(
+        title="📋 Active Prop Bets",
+        description=desc,
+        color=discord.Color.blurple()
+    )
+    await ctx.send(embed=embed)
 
 # =============================
 # Run the Bot
