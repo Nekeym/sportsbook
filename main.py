@@ -1,521 +1,626 @@
- import discord
+# =============================
+# Part 1 — Imports, Config, Setup
+# =============================
+
+import discord
 from discord.ext import commands
-from discord.ui import View, Button, Modal, TextInput
+from discord import app_commands
+import os, json, random, math, asyncio
 from datetime import datetime, timedelta
-import os
-import json
-from keep_alive import keep_alive  # keep_alive.py in same folder
+from flask import Flask
+import threading
 
-# -------------------------------
-# Load environment variables
-# -------------------------------
-TOKEN = os.getenv("TOKENFORBOTHERE")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+# --- Load Environmental Variables from Render ---
+TOKEN = os.getenv("TOKENFORBOTHERE")   # Discord bot token
+ADMIN_ID = int(os.getenv("ADMIN_ID"))  # Your Discord user ID
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # (Not used by bot yet, placeholder for CI/CD if wanted)
 
-# -------------------------------
-# Helper Functions
-# -------------------------------
+# --- Bot Config ---
 USERS_FILE = "users.json"
 MATCHUPS_FILE = "matchups.json"
 
-def load_json(file_path):
-    if os.path.exists(file_path):
-        with open(file_path, "r") as f:
-            return json.load(f)
-    return {}
+CURRENCY_SYMBOL = "💵"
+DAILY_CLAIM_AMOUNT = 50
+STARTING_BALANCE = 250
+BET_LOCK_BUFFER_SECONDS = 300  # Auto-lock X seconds before kickoff
+PAYOUT_CHANNEL_ID = None  # Can override with channel ID for payout logs
 
-def save_json(file_path, data):
-    with open(file_path, "w") as f:
-        json.dump(data, f, indent=4)
-
-def get_user(user_id):
-    users = load_json(USERS_FILE)
-    uid = str(user_id)
-    if uid not in users:
-        users[uid] = {"money": 100, "bet_history": [], "win_history": [], "last_daily": datetime.min.isoformat()}
-        save_json(USERS_FILE, users)
-    return users[uid]
-
-def update_user(user_id, data):
-    users = load_json(USERS_FILE)
-    users[str(user_id)] = data
-    save_json(USERS_FILE, users)
-
-def change_user_money(user_id, amount):
-    user = get_user(user_id)
-    user["money"] += amount
-    update_user(user_id, user)
-
-def log_user_bet(user_id, entry):
-    user = get_user(user_id)
-    if "bet_history" not in user:
-        user["bet_history"] = []
-    user["bet_history"].append(entry)
-    update_user(user_id, user)
-
-def log_user_win(user_id, entry):
-    user = get_user(user_id)
-    if "win_history" not in user:
-        user["win_history"] = []
-    user["win_history"].append(entry)
-    update_user(user_id, user)
-
-def create_embed(title, description):
-    embed = discord.Embed(title=title, description=description, color=discord.Color.blurple())
-    return embed
-
-def no_permission_embed():
-    return create_embed("❌ Permission Denied", "You do not have permission to use this command.")
-
-# -------------------------------
-# Bot Setup
-# -------------------------------
+# --- Discord Intents ---
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
+tree = bot.tree
 
-# -------------------------------
-# Part 1 & 3: Money, Daily, Matchups, Bet History, Win History, Leaderboard
-# -------------------------------
-class MoneyButton(Button):
-    def __init__(self):
-        super().__init__(label="💵 Money", style=discord.ButtonStyle.success)
-    async def callback(self, interaction: discord.Interaction):
-        user_data = get_user(interaction.user.id)
-        await interaction.response.send_message(embed=create_embed("💰 Account Balance", f"You currently have 💵{user_data['money']}"), ephemeral=True)
+# --- Flask Keep Alive (Render/Replit) ---
+app = Flask('')
 
-class DailyButton(Button):
-    def __init__(self):
-        super().__init__(label="🟣 Daily Grab", style=discord.ButtonStyle.primary)
-    async def callback(self, interaction: discord.Interaction):
-        user_data = get_user(interaction.user.id)
-        last_claim = datetime.fromisoformat(user_data.get("last_daily", datetime.min.isoformat()))
-        if datetime.utcnow() - last_claim >= timedelta(hours=24):
-            change_user_money(interaction.user.id, 25)
-            user_data["last_daily"] = datetime.utcnow().isoformat()
-            update_user(interaction.user.id, user_data)
-            await interaction.response.send_message(embed=create_embed("✅ Daily Claimed", "You received 💵25!"), ephemeral=True)
-        else:
-            next_time = last_claim + timedelta(hours=24)
-            remaining = next_time - datetime.utcnow()
-            hours, remainder = divmod(remaining.total_seconds(), 3600)
-            minutes = remainder // 60
-            await interaction.response.send_message(embed=create_embed("⏳ Not Ready Yet", f"Come back in {int(hours)}h {int(minutes)}m"), ephemeral=True)
+@app.route('/')
+def home():
+    return "Bot is alive!"
 
-class MatchupsButton(Button):
-    def __init__(self):
-        super().__init__(label="🤎 Matchups", style=discord.ButtonStyle.secondary)
-    async def callback(self, interaction: discord.Interaction):
-        matchups = load_json(MATCHUPS_FILE)
-        if not matchups:
-            await interaction.response.send_message(embed=create_embed("📭 No Active Bets", "No bets available right now."), ephemeral=True)
-            return
-        for bid, data in matchups.items():
-            embed = create_embed(f"📌 Bet #{bid} ({data['type'].capitalize()})",
-                                 f"**{data['home']}** vs **{data['away'] if data['away'] else 'N/A'}**\nSpread: {data['spread']}\nOver/Under: {data['over_under']}\nMoneyline: {data.get('moneyline',{})}")
-            view = BetTypeSelectionView(bid)
-            try:
-                await interaction.user.send(embed=embed, view=view)
-            except discord.Forbidden:
-                await interaction.response.send_message(embed=create_embed("❌ Cannot DM", "Enable DMs to receive bets."), ephemeral=True)
-                return
-        await interaction.response.send_message(embed=create_embed("📬 Sent", "All bets sent to your DMs."), ephemeral=True)
+def run_keep_alive():
+    app.run(host="0.0.0.0", port=8080)
 
-class BetHistoryButton(Button):
-    def __init__(self):
-        super().__init__(label="📜 Bet History", style=discord.ButtonStyle.secondary)
-    async def callback(self, interaction: discord.Interaction):
-        user = get_user(interaction.user.id)
-        history = user.get("bet_history", [])
-        text = "\n".join(history[-10:]) if history else "No bets placed yet."
-        await interaction.response.send_message(embed=create_embed("📜 Recent Bets", text), ephemeral=True)
+t = threading.Thread(target=run_keep_alive)
+t.start()
 
-class WinHistoryButton(Button):
-    def __init__(self):
-        super().__init__(label="✅ Win History", style=discord.ButtonStyle.success)
-    async def callback(self, interaction: discord.Interaction):
-        user = get_user(interaction.user.id)
-        wins = user.get("win_history", [])
-        text = "\n".join(wins[-10:]) if wins else "No wins yet."
-        await interaction.response.send_message(embed=create_embed("🏅 Recent Wins", text), ephemeral=True)
+# --- Ensure Data Directory ---
+os.makedirs(DATA_DIR, exist_ok=True)
+if not os.path.exists(USERS_FILE):
+    with open(USERS_FILE, "w") as f: json.dump({}, f)
+if not os.path.exists(MATCHUPS_FILE):
+    with open(MATCHUPS_FILE, "w") as f: json.dump({}, f)
 
-class LeaderboardButton(Button):
-    def __init__(self):
-        super().__init__(label="🏆 Leaderboard", style=discord.ButtonStyle.primary)
-    async def callback(self, interaction: discord.Interaction):
-        users = load_json(USERS_FILE)
-        sorted_users = sorted(users.items(), key=lambda x: x[1]["money"], reverse=True)
-        text = ""
-        for i, (uid, data) in enumerate(sorted_users[:10], 1):
-            try:
-                member = await bot.fetch_user(int(uid))
-                wins = sum(1 for h in data.get("bet_history", []) if "WIN" in h)
-                losses = sum(1 for h in data.get("bet_history", []) if "LOSS" in h)
-                text += f"**{i}. {member.display_name}** - 💵{data['money']} | {wins}W-{losses}L\n"
-            except:
-                continue
-        await interaction.response.send_message(embed=create_embed("🏆 Leaderboard (Top 10)", text), ephemeral=True)
+# =============================
+# Part 3 — Odds & Payout Logic
+# =============================
 
-# -------------------------------
-# Part 2 & 4: Bet Selection, Spread/O-U, Amount Modal, Dynamic Moneyline
-# -------------------------------
-class BetTypeSelectionView(View):
-    def __init__(self, bet_id):
-        super().__init__(timeout=60)
-        self.add_item(SpreadButton(bet_id))
-        self.add_item(OUButton(bet_id))
+def implied_decimal_from_moneyline(ml: int):
+    return (ml / 100 + 1) if ml > 0 else (100 / abs(ml) + 1)
 
-class SpreadButton(Button):
-    def __init__(self, bet_id):
-        super().__init__(label="SPREAD", style=discord.ButtonStyle.primary)
-        self.bet_id = bet_id
-    async def callback(self, interaction: discord.Interaction):
-        await show_team_picker(interaction, self.bet_id, "spread")
+def moneyline_from_decimal(dec: float):
+    return int(round((dec - 1) * 100)) if dec >= 2 else int(round(-100 / (dec - 1)))
 
-class OUButton(Button):
-    def __init__(self, bet_id):
-        super().__init__(label="O/U", style=discord.ButtonStyle.secondary)
-        self.bet_id = bet_id
-    async def callback(self, interaction: discord.Interaction):
-        await show_team_picker(interaction, self.bet_id, "ou")
+def calculate_dynamic_moneylines(matchup):
+    """ Adjust odds based on betting volume. """
+    home_vol, away_vol = 0, 0
+    for bet in matchup.get("bets", {}).values():
+        if bet["kind"] == "spread":
+            if bet["selection"] == matchup["home"]: home_vol += bet["amount"]
+            if bet["selection"] == matchup["away"]: away_vol += bet["amount"]
+    total = home_vol + away_vol
+    if total == 0: return {"home_ml": -110, "away_ml": -110}
+    home_share = home_vol / total
+    away_share = away_vol / total
+    # Skew odds based on where money is
+    home_odds = 1.8 + (away_share - home_share) * 0.5
+    away_odds = 1.8 + (home_share - away_share) * 0.5
+    return {"home_ml": moneyline_from_decimal(home_odds), "away_ml": moneyline_from_decimal(away_odds)}
 
-async def show_team_picker(interaction, bet_id, bet_type):
-    bet_data = load_json(MATCHUPS_FILE).get(bet_id)
-    if not bet_data:
-        await interaction.response.send_message(embed=create_embed("❌ Bet Not Found"), ephemeral=True)
+def calculate_payout(bet):
+    """ For single bet or parlay, return payout amount. """
+    if bet["kind"] == "parlay":
+        combined_odds = 1
+        for leg in bet["selection"]:
+            combined_odds *= leg["odds"]
+        return int(bet["amount"] * combined_odds)
+    else:
+        return int(bet["amount"] * bet["odds"])
+
+# =============================
+# Part 4 — Currency & User Commands
+# =============================
+
+@bot.command(name="daily")
+async def daily(ctx):
+    """Claim your daily bonus of 50 coins."""
+    user = get_user(str(ctx.author.id))
+    now = datetime.utcnow()
+    last_claim = user["last_claim"]
+
+    if last_claim and datetime.fromisoformat(last_claim) > now - timedelta(hours=24):
+        await ctx.send(embed=discord.Embed(
+            title="❌ Daily Already Claimed",
+            description="Come back in 24 hours to claim again!",
+            color=discord.Color.red()
+        ))
         return
-    view = View(timeout=60)
-    if bet_type == "spread" and bet_data.get("home"):
-        view.add_item(TeamButton("home", bet_id, bet_data["home"], bet_data["spread"]["home"]))
-        if bet_data.get("away"):
-            view.add_item(TeamButton("away", bet_id, bet_data["away"], bet_data["spread"]["away"]))
-    elif bet_type == "ou" and bet_data.get("over_under"):
-        view.add_item(OUChoiceButton("over", bet_id))
-        view.add_item(OUChoiceButton("under", bet_id))
-    await interaction.response.send_message(embed=create_embed("📊 Choose Option", f"Select for {bet_type.upper()}"), view=view, ephemeral=True)
+    
+    user["balance"] += DAILY_CLAIM_AMOUNT
+    user["last_claim"] = now.isoformat()
+    save_users()
 
-class TeamButton(Button):
-    def __init__(self, key, bet_id, name, spread):
-        super().__init__(label=f"{name} ({spread:+})", style=discord.ButtonStyle.success)
-        self.key = key
-        self.bet_id = bet_id
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(AmountModal(self.bet_id, "spread", self.key))
+    embed = discord.Embed(
+        title="✅ Daily Claimed",
+        description=f"You received {format_currency(DAILY_CLAIM_AMOUNT)}.\nYour new balance: {format_currency(user['balance'])}",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed)
 
-class OUChoiceButton(Button):
-    def __init__(self, label_val, bet_id):
-        super().__init__(label=label_val.upper(), style=discord.ButtonStyle.success)
-        self.label_val = label_val
-        self.bet_id = bet_id
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(AmountModal(self.bet_id, "ou", self.label_val))
 
-class AmountModal(Modal):
-    def __init__(self, bet_id, bet_type, target):
-        super().__init__(title="Enter Bet Amount")
-        self.bet_id = bet_id
-        self.bet_type = bet_type
-        self.target = target
-        self.amount = TextInput(label="Amount to Bet", placeholder="e.g. 100", required=True)
-        self.add_item(self.amount)
+@bot.command(name="balance")
+async def balance(ctx, member: discord.Member = None):
+    """Check your balance (or another user's)."""
+    member = member or ctx.author
+    user = get_user(str(member.id))
 
-    async def on_submit(self, interaction: discord.Interaction):
-        user = get_user(interaction.user.id)
-        try:
-            bet_amount = int(self.amount.value)
-            if bet_amount <= 0 or bet_amount > user["money"]:
-                raise ValueError
-        except:
-            await interaction.response.send_message(embed=create_embed("⚠️ Invalid Amount"), ephemeral=True)
-            return
+    embed = discord.Embed(
+        title=f"{member.display_name}'s Balance",
+        description=f"{format_currency(user['balance'])}",
+        color=discord.Color.gold()
+    )
+    await ctx.send(embed=embed)
 
-        bets = load_json(MATCHUPS_FILE)
-        bet_data = bets.get(self.bet_id)
-        if not bet_data:
-            await interaction.response.send_message(embed=create_embed("❌ Bet Not Found"), ephemeral=True)
-            return
 
-        # Dynamic payout
-        total_on_target = sum(b["amount"] for b in bet_data.get("bets", []) if b["type"] == self.bet_type and b["target"] == self.target)
-        payout_multiplier = max(1.8 - (total_on_target / 1000), 1.1)
-        payout = round(bet_amount * payout_multiplier)
+@bot.command(name="history")
+async def history(ctx, member: discord.Member = None):
+    """View a user's win/loss history."""
+    member = member or ctx.author
+    user = get_user(str(member.id))
 
-        if "bets" not in bet_data:
-            bet_data["bets"] = []
-        bet_data["bets"].append({"user": interaction.user.id, "amount": bet_amount, "type": self.bet_type, "target": self.target, "payout": payout})
-        save_json(MATCHUPS_FILE, bets)
+    history_text = ""
+    for h in user["history"][-10:]:  # last 10
+        outcome = "✅ WIN" if h["payout"] and h["payout"] > 0 else "❌ LOSS"
+        history_text += f"• {h['kind']} on {h['selection']} — {outcome} ({format_currency(h['amount'])})\n"
 
-        change_user_money(interaction.user.id, -bet_amount)
-        log_user_bet(interaction.user.id, f"{datetime.utcnow().strftime('%m/%d %H:%M')} | {self.target.upper()} | {self.bet_type.upper()} | 💵{bet_amount}")
+    if not history_text:
+        history_text = "No history yet."
 
-        # Update dynamic moneyline
-        await update_moneyline_on_bet(self.bet_id)
+    embed = discord.Embed(
+        title=f"{member.display_name}'s Betting History",
+        description=history_text,
+        color=discord.Color.blue()
+    )
+    await ctx.send(embed=embed)
 
-        await interaction.response.send_message(embed=create_embed("✅ Bet Placed", f"You bet 💵{bet_amount} on **{self.target.upper()}**\nPotential payout: 💵{payout}"), ephemeral=True)
 
-def calculate_dynamic_moneyline(bet_id):
-    bets = load_json(MATCHUPS_FILE)
-    matchup = bets.get(bet_id)
+@bot.command(name="leaderboard")
+async def leaderboard(ctx, category: str = "balance"):
+    """Show leaderboard (balance, spent, won, bets_won, bets_lost)."""
+    valid = ["balance", "spent", "won", "lost", "bets_won", "bets_lost"]
+    if category not in valid:
+        await ctx.send(embed=discord.Embed(
+            title="❌ Invalid Category",
+            description=f"Choose from: {', '.join(valid)}",
+            color=discord.Color.red()
+        ))
+        return
+
+    sorted_users = sorted(
+        USERS.items(),
+        key=lambda x: x[1]["balance"] if category == "balance" else x[1]["stats"][category],
+        reverse=True
+    )[:10]
+
+    desc = ""
+    for i, (uid, data) in enumerate(sorted_users, start=1):
+        member = ctx.guild.get_member(int(uid))
+        name = member.display_name if member else f"User {uid}"
+        stat = data["balance"] if category == "balance" else data["stats"][category]
+        desc += f"**{i}. {name}** — {format_currency(stat) if category in ['balance','spent','won','lost'] else stat}\n"
+
+    embed = discord.Embed(
+        title=f"🏆 Leaderboard: {category.title()}",
+        description=desc,
+        color=discord.Color.gold()
+    )
+    await ctx.send(embed=embed)
+
+# =============================
+# Part 5 — Matchups & Betting
+# =============================
+
+def is_admin(ctx):
+    return ctx.author.id == ADMIN_ID or ctx.author.guild_permissions.administrator
+
+# --- Admin: Add Matchup ---
+@bot.command(name="addmatchup")
+async def add_matchup(ctx, kind: str, title: str, home: str = None, away: str = None, spread: float = 0.0, overunder: float = 0.0):
+    """Add a matchup (spread, overunder, prop)."""
+    if not is_admin(ctx):
+        return await ctx.send("❌ You are not an admin.")
+
+    mid = gen_id("m")
+    MATCHUPS[mid] = {
+        "id": mid,
+        "type": kind,
+        "title": title,
+        "home": home,
+        "away": away,
+        "spread": spread,
+        "overunder": overunder,
+        "bets": {},
+        "locked": False,
+        "settled": False,
+        "result": None,
+        "start_time": (datetime.utcnow() + timedelta(hours=1)).isoformat()
+    }
+    save_matchups()
+
+    embed = discord.Embed(
+        title="✅ Matchup Created",
+        description=f"**{title}** (type: {kind})",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed)
+
+# --- User: Place Bet ---
+@bot.command(name="bet")
+async def bet(ctx, matchup_id: str, selection: str, amount: int):
+    """Place a bet on a matchup."""
+    user = get_user(str(ctx.author.id))
+    if amount <= 0 or user["balance"] < amount:
+        return await ctx.send("❌ Invalid bet amount.")
+
+    matchup = MATCHUPS.get(matchup_id)
     if not matchup:
-        return
-    home_total = sum(b["amount"] for b in matchup.get("bets", []) if b["target"] == "home")
-    away_total = sum(b["amount"] for b in matchup.get("bets", []) if b["target"] == "away")
-    total = max(home_total + away_total, 1)
-    base_line = 110
-    matchup["moneyline"] = {"home": int(base_line * (away_total / total)), "away": int(base_line * (home_total / total))}
-    save_json(MATCHUPS_FILE, bets)
+        return await ctx.send("❌ Matchup not found.")
+    if matchup["locked"]:
+        return await ctx.send("❌ Betting is locked for this matchup.")
 
-async def update_moneyline_on_bet(bet_id):
-    calculate_dynamic_moneyline(bet_id)
+    # calculate odds
+    odds_data = calculate_dynamic_moneylines(matchup)
+    odds = 1.9  # default
+    if selection.upper() == matchup["home"].upper():
+        odds = implied_decimal_from_moneyline(odds_data["home_ml"])
+    elif selection.upper() == matchup["away"].upper():
+        odds = implied_decimal_from_moneyline(odds_data["away_ml"])
 
-# -------------------------------
-# Part 5 & 6: Admin & Advanced Bets
-# -------------------------------
-class FinishMatchupModal(Modal):
-    def __init__(self):
-        super().__init__(title="Finish Matchup")
-        self.match_id = TextInput(label="Matchup ID", placeholder="ID of the matchup to finish")
-        self.spread_winner = TextInput(label="Spread Winner", placeholder="home/away")
-        self.ou_result = TextInput(label="O/U Result", placeholder="over/under")
-        self.add_item(self.match_id)
-        self.add_item(self.spread_winner)
-        self.add_item(self.ou_result)
+    # deduct + record
+    user["balance"] -= amount
+    bet_id = gen_id("b")
+    bet_obj = {
+        "id": bet_id,
+        "user_id": str(ctx.author.id),
+        "matchup_id": matchup_id,
+        "kind": matchup["type"],
+        "selection": selection.upper(),
+        "amount": amount,
+        "odds": odds,
+        "placed_at": datetime.utcnow().isoformat(),
+        "resolved": False,
+        "payout": None
+    }
+    user["bets"][bet_id] = bet_obj
+    matchup["bets"][bet_id] = bet_obj
+    user["stats"]["spent"] += amount
+    save_users(); save_matchups()
 
-    async def on_submit(self, interaction: discord.Interaction):
-        matchups = load_json(MATCHUPS_FILE)
-        uid = self.match_id.value.strip()
-        if uid not in matchups:
-            await interaction.response.send_message(embed=create_embed("❌ Matchup Not Found"), ephemeral=True)
-            return
-        matchup = matchups[uid]
-        spread_winner = self.spread_winner.value.lower()
-        ou_result = self.ou_result.value.lower()
-        for bet in matchup.get("bets", []):
-            payout = 0
-            won = False
-            if bet["type"] == "spread" and bet["target"] == spread_winner:
-                payout = bet["payout"]
-                change_user_money(bet["user"], payout)
-                log_user_win(bet["user"], f"{datetime.utcnow().strftime('%m/%d %H:%M')} | {bet['target']} | SPREAD | 💵{payout}")
-            elif bet["type"] == "ou" and bet["target"] == ou_result:
-                payout = bet["payout"]
-                change_user_money(bet["user"], payout)
-                log_user_win(bet["user"], f"{datetime.utcnow().strftime('%m/%d %H:%M')} | {bet['target']} | O/U | 💵{payout}")
-        del matchups[uid]
-        save_json(MATCHUPS_FILE, matchups)
-        await interaction.response.send_message(embed=create_embed("✅ Matchup Settled", f"Matchup {uid} has been settled and bets paid."), ephemeral=True)
+    embed = discord.Embed(
+        title="🎟️ Bet Slip",
+        description=f"Matchup: {matchup['title']}\nPick: **{selection.upper()}**\nWager: {format_currency(amount)}\nOdds: {odds:.2f}",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"Bet ID: {bet_id}")
+    await ctx.send(embed=embed)
 
-@bot.command()
-async def finishmatchup(ctx):
-    if ctx.author.id != ADMIN_ID:
-        await ctx.send(embed=no_permission_embed())
-        return
-    await ctx.send_modal(FinishMatchupModal())
+# --- User: Pending Bets ---
+@bot.command(name="pending")
+async def pending(ctx, member: discord.Member = None):
+    """View pending bets for a user."""
+    member = member or ctx.author
+    user = get_user(str(member.id))
 
-# Parlay, Prop, Futures Modals & Buttons
-class ParlayModal(Modal):
-    def __init__(self):
-        super().__init__(title="Place Parlay Bet")
-        self.details = TextInput(label="Parlay Details", placeholder="Format: matchupID-type-target;...", required=True)
-        self.amount = TextInput(label="Amount to Bet", placeholder="💵 Amount", required=True)
-        self.add_item(self.details)
-        self.add_item(self.amount)
-    async def on_submit(self, interaction: discord.Interaction):
-        user = get_user(interaction.user.id)
+    if not user["bets"]:
+        return await ctx.send(f"{member.display_name} has no pending bets.")
+
+    desc = ""
+    for b in user["bets"].values():
+        desc += f"• {b['selection']} on {MATCHUPS[b['matchup_id']]['title']} ({format_currency(b['amount'])})\n"
+
+    embed = discord.Embed(
+        title=f"📋 Pending Bets: {member.display_name}",
+        description=desc,
+        color=discord.Color.orange()
+    )
+    await ctx.send(embed=embed)
+
+# --- Admin: Settle Matchup ---
+@bot.command(name="settlematchup")
+async def settle_matchup(ctx, matchup_id: str, winning_selection: str):
+    """Settle a matchup and pay out winners."""
+    if not is_admin(ctx):
+        return await ctx.send("❌ You are not an admin.")
+    
+    matchup = MATCHUPS.get(matchup_id)
+    if not matchup: return await ctx.send("❌ Matchup not found.")
+    if matchup["settled"]: return await ctx.send("❌ Already settled.")
+
+    matchup["settled"] = True
+    matchup["result"] = {"winner": winning_selection.upper()}
+
+    payout_messages = []
+    for bet_id, bet in list(matchup["bets"].items()):
+        user = get_user(bet["user_id"])
+        if bet["selection"].upper() == winning_selection.upper():
+            payout = calculate_payout(bet)
+            user["balance"] += payout
+            bet["payout"] = payout
+            user["stats"]["won"] += payout
+            user["stats"]["bets_won"] += 1
+            payout_messages.append(f"<@{bet['user_id']}> won {format_currency(payout)} on {matchup['title']}!")
+        else:
+            user["stats"]["lost"] += bet["amount"]
+            user["stats"]["bets_lost"] += 1
+            bet["payout"] = 0
+        bet["resolved"] = True
+        user["history"].append(bet)
+        del user["bets"][bet_id]
+    save_users(); save_matchups()
+
+    msg = "\n".join(payout_messages) if payout_messages else "Nobody won this time!"
+    embed = discord.Embed(
+        title=f"🏁 Matchup Settled: {matchup['title']}",
+        description=msg,
+        color=discord.Color.green()
+    )
+    channel = ctx.guild.get_channel(PAYOUT_CHANNEL_ID) if PAYOUT_CHANNEL_ID else ctx.channel
+    await channel.send(embed=embed)
+
+# =============================
+# Part 6 — Extras
+# =============================
+
+@bot.command(name="volume")
+async def volume(ctx, matchup_id: str):
+    """Show betting volume for a matchup."""
+    matchup = MATCHUPS.get(matchup_id)
+    if not matchup: return await ctx.send("❌ Matchup not found.")
+
+    total = sum(b["amount"] for b in matchup["bets"].values())
+    desc = f"Total Bet Volume: {format_currency(total)}\n"
+    by_sel = {}
+    for b in matchup["bets"].values():
+        by_sel[b["selection"]] = by_sel.get(b["selection"], 0) + b["amount"]
+    for sel, amt in by_sel.items():
+        desc += f"• {sel}: {format_currency(amt)}\n"
+
+    embed = discord.Embed(
+        title=f"📊 Bet Volume: {matchup['title']}",
+        description=desc,
+        color=discord.Color.purple()
+    )
+    await ctx.send(embed=embed)
+
+# Example Achievement (First Bet)
+def check_achievements(user, bet):
+    if "First Bet" not in user["achievements"]:
+        user["achievements"].append("First Bet")
+
+# Example Weekly Challenge
+@bot.command(name="weekly")
+async def weekly(ctx):
+    user = get_user(str(ctx.author.id))
+    week_start = datetime.utcnow() - timedelta(days=datetime.utcnow().weekday())
+    if not user["weekly"]["week_start"] or datetime.fromisoformat(user["weekly"]["week_start"]) < week_start:
+        user["weekly"] = {"week_start": week_start.isoformat(), "progress": {"bets": 0}, "claimed_this_week": False}
+    save_users()
+
+    progress = user["weekly"]["progress"]["bets"]
+    desc = f"Bets Placed: {progress}/5\n"
+    if progress >= 5 and not user["weekly"]["claimed_this_week"]:
+        user["balance"] += WEEKLY_CHALLENGE_PAYOUT
+        user["weekly"]["claimed_this_week"] = True
+        desc += f"✅ Challenge Complete! You earned {format_currency(WEEKLY_CHALLENGE_PAYOUT)}"
+        save_users()
+
+    embed = discord.Embed(
+        title=f"📅 Weekly Challenge — {ctx.author.display_name}",
+        description=desc,
+        color=discord.Color.teal()
+    )
+    await ctx.send(embed=embed)
+
+# =============================
+# Part 7 — Parlay Command
+# =============================
+
+@bot.command(name="parlay")
+async def parlay(ctx):
+    """
+    Let users create a parlay bet.
+    Steps:
+      1. Show open matchups
+      2. Ask user to pick 2-5 legs
+      3. Ask user to choose selection for each leg
+      4. Ask for total stake
+      5. Calculate combined odds and confirm
+    """
+    user = get_user(str(ctx.author.id))
+
+    # Step 1: List open matchups
+    open_matchups = [m for m in MATCHUPS.values() if not m["locked"] and not m["settled"]]
+    if not open_matchups:
+        return await ctx.send("❌ No open matchups available for parlays.")
+
+    desc = ""
+    for i, m in enumerate(open_matchups, start=1):
+        teams = f"{m['home']} vs {m['away']}" if m.get("home") else m['title']
+        desc += f"{i}. {teams} (Type: {m['type']})\n"
+    await ctx.send(embed=discord.Embed(
+        title="📋 Open Matchups",
+        description=desc,
+        color=discord.Color.blurple()
+    ))
+
+    # Step 2: Ask for leg numbers
+    await ctx.send("Enter the numbers of the matchups you want in your parlay, separated by commas (e.g., 1,3,5):")
+    try:
+        msg = await bot.wait_for("message", check=lambda m: m.author == ctx.author, timeout=60)
+        indices = [int(x.strip()) - 1 for x in msg.content.split(",")]
+        if not 2 <= len(indices) <= 5:
+            return await ctx.send("❌ Parlays must have 2–5 legs.")
+    except Exception:
+        return await ctx.send("❌ Invalid input or timed out.")
+
+    selected_matchups = [open_matchups[i] for i in indices]
+
+    # Step 3: Ask selection for each leg
+    legs = []
+    for m in selected_matchups:
+        teams = [m['home'], m['away']] if m.get("home") else ["Option1", "Option2"]
+        await ctx.send(f"Select for **{m['title']}**:\n{teams[0]} or {teams[1]}?")
         try:
-            amount_int = int(self.amount.value.strip())
-            if amount_int <=0 or amount_int > user["money"]:
-                raise ValueError
-        except:
-            await interaction.response.send_message(embed=create_embed("⚠️ Invalid Amount"), ephemeral=True)
-            return
-        entries = self.details.value.strip().split(";")
-        bets_list = []
+            msg = await bot.wait_for("message", check=lambda m: m.author == ctx.author, timeout=60)
+            sel = msg.content.strip().upper()
+            if sel not in [t.upper() for t in teams]:
+                return await ctx.send("❌ Invalid selection.")
+            # get current odds for selection
+            odds_data = calculate_dynamic_moneylines(m)
+            odds = implied_decimal_from_moneyline(odds_data["home_ml"]) if sel.upper() == m["home"].upper() else implied_decimal_from_moneyline(odds_data["away_ml"])
+            legs.append({"matchup_id": m["id"], "selection": sel, "odds": odds})
+        except Exception:
+            return await ctx.send("❌ Timed out or error in selection.")
+
+    # Step 4: Ask for total stake
+    await ctx.send(f"Enter your total stake (you have {format_currency(user['balance'])}):")
+    try:
+        msg = await bot.wait_for("message", check=lambda m: m.author == ctx.author, timeout=60)
+        amount = int(msg.content.strip())
+        if amount <= 0 or amount > user["balance"]:
+            return await ctx.send("❌ Invalid stake amount.")
+    except Exception:
+        return await ctx.send("❌ Invalid input or timed out.")
+
+    # Step 5: Deduct balance, record bet
+    user["balance"] -= amount
+    bet_id = gen_id("b")
+    parlay_bet = {
+        "id": bet_id,
+        "user_id": str(ctx.author.id),
+        "matchup_id": None,
+        "kind": "parlay",
+        "selection": legs,
+        "amount": amount,
+        "odds": None,  # calculated from legs
+        "placed_at": datetime.utcnow().isoformat(),
+        "resolved": False,
+        "payout": None
+    }
+    user["bets"][bet_id] = parlay_bet
+    save_users()
+
+    # Step 6: Calculate combined odds for display
+    combined_odds = 1
+    for leg in legs:
+        combined_odds *= leg["odds"]
+
+    # Step 7: Send confirmation embed
+    desc = ""
+    for leg in legs:
+        matchup = MATCHUPS.get(leg["matchup_id"])
+        title = matchup["title"] if matchup else "Prop Bet"
+        desc += f"• {leg['selection']} on {title} (Odds: {leg['odds']:.2f})\n"
+
+    embed = discord.Embed(
+        title="🎟️ Parlay Bet Slip",
+        description=desc,
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="Stake", value=format_currency(amount))
+    embed.add_field(name="Combined Odds", value=f"{combined_odds:.2f}")
+    embed.set_footer(text=f"Bet ID: {bet_id}")
+    await ctx.send(embed=embed)
+
+# =============================
+# Part 8 — Remaining Admin / Utility Commands
+# =============================
+
+# --- Admin: Edit Matchup ---
+@bot.command(name="editmatchup")
+async def edit_matchup(ctx, matchup_id: str, field: str, *, value: str):
+    """
+    Edit an existing matchup field (title, home, away, spread, overunder).
+    Usage: !editmatchup m_123 title Oklahoma vs Texas
+    """
+    if not is_admin(ctx):
+        return await ctx.send("❌ You are not an admin.")
+
+    matchup = MATCHUPS.get(matchup_id)
+    if not matchup:
+        return await ctx.send("❌ Matchup not found.")
+
+    if field not in ["title", "home", "away", "spread", "overunder", "type"]:
+        return await ctx.send("❌ Invalid field. Allowed: title, home, away, spread, overunder, type.")
+
+    # Convert numeric fields
+    if field in ["spread", "overunder"]:
         try:
-            for entry in entries:
-                mid, btype, target = entry.strip().split("-")
-                bets_list.append({"matchup": mid, "type": btype.lower(), "target": target.lower()})
-        except:
-            await interaction.response.send_message(embed=create_embed("⚠️ Invalid Format"), ephemeral=True)
-            return
-        payout_multiplier = 1.5 + 0.1*len(bets_list)
-        payout = round(amount_int * payout_multiplier)
-        parlay_bets = load_json("parlays.json") if os.path.exists("parlays.json") else {}
-        parlay_bets[f"{interaction.user.id}_{datetime.utcnow().timestamp()}"] = {"user":interaction.user.id,"type":"parlay","details":bets_list,"amount":amount_int,"payout":payout}
-        save_json("parlays.json", parlay_bets)
-        change_user_money(interaction.user.id, -amount_int)
-        log_user_bet(interaction.user.id, f"{datetime.utcnow().strftime('%m/%d %H:%M')} | PARLAY | 💵{amount_int}")
-        await interaction.response.send_message(embed=create_embed("✅ Parlay Placed", f"You bet 💵{amount_int} on {len(bets_list)}-leg parlay. Potential payout: 💵{payout}"), ephemeral=True)
+            value = float(value)
+        except ValueError:
+            return await ctx.send("❌ Spread/Overunder must be a number.")
 
-class PropModal(Modal):
-    def __init__(self):
-        super().__init__(title="Place Prop Bet")
-        self.description = TextInput(label="Prop Description", placeholder="Describe prop", required=True)
-        self.amount = TextInput(label="Amount to Bet", placeholder="💵 Amount", required=True)
-        self.add_item(self.description)
-        self.add_item(self.amount)
-    async def on_submit(self, interaction: discord.Interaction):
-        user = get_user(interaction.user.id)
-        try:
-            amount_int = int(self.amount.value.strip())
-            if amount_int<=0 or amount_int>user["money"]: raise ValueError
-        except:
-            await interaction.response.send_message(embed=create_embed("⚠️ Invalid Amount"), ephemeral=True)
-            return
-        prop_bets = load_json("props.json") if os.path.exists("props.json") else {}
-        bet_id = f"{interaction.user.id}_{datetime.utcnow().timestamp()}"
-        prop_bets[bet_id] = {"user":interaction.user.id,"description":self.description.value.strip(),"amount":amount_int,"payout":int(amount_int*1.8)}
-        save_json("props.json", prop_bets)
-        change_user_money(interaction.user.id,-amount_int)
-        log_user_bet(interaction.user.id,f"{datetime.utcnow().strftime('%m/%d %H:%M')} | PROP | 💵{amount_int}")
-        await interaction.response.send_message(embed=create_embed("✅ Prop Bet Placed", f"You bet 💵{amount_int} on: {self.description.value.strip()}"), ephemeral=True)
+    matchup[field] = value
+    save_matchups()
+    await ctx.send(embed=discord.Embed(
+        title="✅ Matchup Updated",
+        description=f"{field} set to `{value}` for matchup {matchup['title']}",
+        color=discord.Color.green()
+    ))
 
-class FuturesModal(Modal):
-    def __init__(self):
-        super().__init__(title="Place Futures Bet")
-        self.description = TextInput(label="Futures Description", placeholder="Describe outcome", required=True)
-        self.amount = TextInput(label="Amount to Bet", placeholder="💵 Amount", required=True)
-        self.add_item(self.description)
-        self.add_item(self.amount)
-    async def on_submit(self, interaction: discord.Interaction):
-        user = get_user(interaction.user.id)
-        try:
-            amount_int = int(self.amount.value.strip())
-            if amount_int<=0 or amount_int>user["money"]: raise ValueError
-        except:
-            await interaction.response.send_message(embed=create_embed("⚠️ Invalid Amount"), ephemeral=True)
-            return
-        futures_bets = load_json("futures.json") if os.path.exists("futures.json") else {}
-        bet_id = f"{interaction.user.id}_{datetime.utcnow().timestamp()}"
-        futures_bets[bet_id] = {"user":interaction.user.id,"description":self.description.value.strip(),"amount":amount_int,"payout":int(amount_int*2.0)}
-        save_json("futures.json", futures_bets)
-        change_user_money(interaction.user.id,-amount_int)
-        log_user_bet(interaction.user.id,f"{datetime.utcnow().strftime('%m/%d %H:%M')} | FUTURES | 💵{amount_int}")
-        await interaction.response.send_message(embed=create_embed("✅ Futures Bet Placed", f"You bet 💵{amount_int} on: {self.description.value.strip()}"), ephemeral=True)
+# --- Admin: Remove Matchup ---
+@bot.command(name="removematchup")
+async def remove_matchup(ctx, matchup_id: str):
+    """Remove a matchup completely."""
+    if not is_admin(ctx):
+        return await ctx.send("❌ You are not an admin.")
 
-class ParlayButton(Button):
-    def __init__(self):
-        super().__init__(label="Parlay Bet", style=discord.ButtonStyle.secondary)
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(ParlayModal())
+    matchup = MATCHUPS.pop(matchup_id, None)
+    if not matchup:
+        return await ctx.send("❌ Matchup not found.")
 
-class PropButton(Button):
-    def __init__(self):
-        super().__init__(label="Prop Bet", style=discord.ButtonStyle.primary)
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(PropModal())
+    save_matchups()
+    await ctx.send(embed=discord.Embed(
+        title="✅ Matchup Removed",
+        description=f"Removed matchup: {matchup['title']}",
+        color=discord.Color.red()
+    ))
 
-class FuturesButton(Button):
-    def __init__(self):
-        super().__init__(label="Futures Bet", style=discord.ButtonStyle.success)
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(FuturesModal())
+# --- Admin: Add Money ---
+@bot.command(name="addmoney")
+async def add_money(ctx, member: discord.Member, amount: int):
+    """Admin adds coins to a user."""
+    if not is_admin(ctx):
+        return await ctx.send("❌ You are not an admin.")
 
-class AdvancedBettingView(View):
-    def __init__(self):
-        super().__init__(timeout=180)
-        self.add_item(MoneyButton())
-        self.add_item(DailyButton())
-        self.add_item(MatchupsButton())
-        self.add_item(BetHistoryButton())
-        self.add_item(WinHistoryButton())
-        self.add_item(LeaderboardButton())
-        self.add_item(ParlayButton())
-        self.add_item(PropButton())
-        self.add_item(FuturesButton())
+    if amount <= 0:
+        return await ctx.send("❌ Amount must be positive.")
 
-# -------------------------------
-# Part 7: Settlement Functions
-# -------------------------------
-def settle_matchup(matchup_id, winning_spread, ou_result):
-    matchups = load_json(MATCHUPS_FILE)
-    users = load_json(USERS_FILE)
-    if matchup_id not in matchups:
-        return False, "Matchup not found."
-    matchup = matchups[matchup_id]
-    for bet in matchup.get("bets", []):
-        uid = str(bet["user"])
-        if uid not in users: users[uid] = {"money":0,"bet_history":[],"win_history":[]}
-        won = False
-        if bet["type"]=="spread" and bet["target"]==winning_spread: won=True
-        elif bet["type"]=="ou" and bet["target"]==ou_result: won=True
-        payout = bet["payout"] if won else 0
-        change_user_money(int(uid), payout)
-        log_user_bet(int(uid), f"{datetime.utcnow().strftime('%m/%d %H:%M')} | MATCHUP {matchup_id} | {'WIN' if won else 'LOSS'} | 💵{payout}")
-    del matchups[matchup_id]
-    save_json(MATCHUPS_FILE, matchups)
-    save_json(USERS_FILE, users)
-    return True, "Matchup settled."
+    user = get_user(str(member.id))
+    user["balance"] += amount
+    save_users()
+    await ctx.send(embed=discord.Embed(
+        title="✅ Money Added",
+        description=f"{format_currency(amount)} added to {member.display_name}. New balance: {format_currency(user['balance'])}",
+        color=discord.Color.green()
+    ))
 
-def settle_parlays(results_dict):
-    parlays = load_json("parlays.json") if os.path.exists("parlays.json") else {}
-    for pid, res in results_dict.items():
-        parlay = parlays.get(pid)
-        if not parlay: continue
-        all_won = all(res)
-        payout = parlay["payout"] if all_won else 0
-        change_user_money(parlay["user"], payout)
-        log_user_bet(parlay["user"], f"{datetime.utcnow().strftime('%m/%d %H:%M')} | PARLAY | {'WIN' if all_won else 'LOSS'} | 💵{payout}")
-        del parlays[pid]
-    save_json("parlays.json", parlays)
+# --- Admin: Remove Money ---
+@bot.command(name="removemoney")
+async def remove_money(ctx, member: discord.Member, amount: int):
+    """Admin removes coins from a user."""
+    if not is_admin(ctx):
+        return await ctx.send("❌ You are not an admin.")
 
-def settle_props(results_dict):
-    props = load_json("props.json") if os.path.exists("props.json") else {}
-    for pid, won in results_dict.items():
-        prop = props.get(pid)
-        if not prop: continue
-        payout = prop["payout"] if won else 0
-        change_user_money(prop["user"], payout)
-        log_user_bet(prop["user"], f"{datetime.utcnow().strftime('%m/%d %H:%M')} | PROP | {'WIN' if won else 'LOSS'} | 💵{payout}")
-        del props[pid]
-    save_json("props.json", props)
+    if amount <= 0:
+        return await ctx.send("❌ Amount must be positive.")
 
-def settle_futures(results_dict):
-    futures = load_json("futures.json") if os.path.exists("futures.json") else {}
-    for fid, won in results_dict.items():
-        fut = futures.get(fid)
-        if not fut: continue
-        payout = fut["payout"] if won else 0
-        change_user_money(fut["user"], payout)
-        log_user_bet(fut["user"], f"{datetime.utcnow().strftime('%m/%d %H:%M')} | FUTURES | {'WIN' if won else 'LOSS'} | 💵{payout}")
-        del futures[fid]
-    save_json("futures.json", futures)
+    user = get_user(str(member.id))
+    user["balance"] = max(user["balance"] - amount, 0)
+    save_users()
+    await ctx.send(embed=discord.Embed(
+        title="✅ Money Removed",
+        description=f"{format_currency(amount)} removed from {member.display_name}. New balance: {format_currency(user['balance'])}",
+        color=discord.Color.orange()
+    ))
 
-# -------------------------------
-# Start Bot
-# -------------------------------
-class AdminView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(FinishMatchupButton())
-        self.add_item(CreateMatchupButton())
-        self.add_item(DeleteMatchupButton())
-        self.add_item(SettleParlayButton())
-        self.add_item(SettlePropButton())
-        self.add_item(SettleFuturesButton())
-        self.add_item(ViewUserBetsButton())
+# --- Admin: Lock Matchup ---
+@bot.command(name="lockmatchup")
+async def lock_matchup(ctx, matchup_id: str):
+    """Lock betting on a matchup."""
+    if not is_admin(ctx):
+        return await ctx.send("❌ You are not an admin.")
+
+    matchup = MATCHUPS.get(matchup_id)
+    if not matchup:
+        return await ctx.send("❌ Matchup not found.")
+
+    matchup["locked"] = True
+    save_matchups()
+    await ctx.send(embed=discord.Embed(
+        title="🔒 Matchup Locked",
+        description=f"Betting is now locked for {matchup['title']}.",
+        color=discord.Color.red()
+    ))
+
+# =============================
+# Run the Bot
+# =============================
 
 @bot.event
 async def on_ready():
-    print(f"🚀 Logged in as {bot.user}")
+    print(f"✅ Logged in as {bot.user}")
 
-@bot.command()
-async def betting(ctx):
-    view = AdvancedBettingView()
-    await ctx.send(embed=create_embed("🎲 Betting Menu", "Select an option below:"), view=view)
-
-@bot.command()
-async def admincommands(ctx):
-    if ctx.author.id != ADMIN_ID:
-        await ctx.send(embed=no_permission_embed())
-        return
-
-    # Create an embed for the admin menu
-    embed = create_embed("⚡ Admin Menu", "Use the buttons below to manage all matchups and bets.")
-
-    # Send the embed with the interactive admin buttons
-    await ctx.send(embed=embed, view=AdminView())
-
-
-keep_alive()
 bot.run(TOKEN)
