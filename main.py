@@ -725,6 +725,137 @@ async def admin_help(ctx):
         color=discord.Color.red()
     )
     await ctx.send(embed=embed)
+@bot.command(name="addprop")
+async def add_prop(ctx, prop_type: str, *, question: str):
+    """
+    Admin creates a prop bet.
+    prop_type: "numeric" or "choice"
+    question: the question for users (e.g., "Who will win the Heisman?" or "How many passing yards will Player X have?")
+    """
+    if not is_admin(ctx):
+        return await ctx.send("❌ You are not an admin.")
+
+    mid = gen_id("m")
+    MATCHUPS[mid] = {
+        "id": mid,
+        "type": "prop",
+        "prop_type": prop_type.lower(),  # "numeric" or "choice"
+        "title": question,
+        "bets": {},
+        "locked": False,
+        "settled": False,
+        "result": None
+    }
+    save_matchups()
+
+    await ctx.send(embed=discord.Embed(
+        title="✅ Prop Bet Created",
+        description=f"**{question}** (Type: {prop_type.capitalize()})\nMatchup ID: {mid}",
+        color=discord.Color.green()
+    ))
+
+@bot.command(name="betprop")
+async def bet_prop(ctx, matchup_id: str, value, amount: int):
+    """
+    Place a bet on a prop matchup.
+    value: number (numeric prop) or string (choice prop)
+    amount: bet coins
+    """
+    user = get_user(str(ctx.author.id))
+    if amount <= 0 or user["balance"] < amount:
+        return await ctx.send("❌ Invalid bet amount.")
+
+    matchup = MATCHUPS.get(matchup_id)
+    if not matchup:
+        return await ctx.send("❌ Matchup not found.")
+    if matchup["locked"]:
+        return await ctx.send("❌ Betting is locked for this matchup.")
+    if matchup["settled"]:
+        return await ctx.send("❌ This matchup has been settled.")
+
+    # Convert numeric prop value to number if applicable
+    if matchup.get("prop_type") == "numeric":
+        try:
+            value = float(value)
+        except ValueError:
+            return await ctx.send("❌ You must enter a number for this prop.")
+
+    # Record bet
+    user["balance"] -= amount
+    bet_id = gen_id("b")
+    bet_obj = {
+        "id": bet_id,
+        "user_id": str(ctx.author.id),
+        "matchup_id": matchup_id,
+        "kind": "prop",
+        "prop_type": matchup.get("prop_type"),
+        "selection": value,
+        "amount": amount,
+        "odds": 1.0,  # can implement scaling later
+        "placed_at": datetime.utcnow().isoformat(),
+        "resolved": False,
+        "payout": None
+    }
+    user["bets"][bet_id] = bet_obj
+    matchup["bets"][bet_id] = bet_obj
+    save_users(); save_matchups()
+
+    await ctx.send(embed=discord.Embed(
+        title="🎟️ Prop Bet Placed",
+        description=f"Question: {matchup['title']}\nYour Pick: **{value}**\nWager: {format_currency(amount)}",
+        color=discord.Color.blue()
+    ))
+
+@bot.command(name="settleprop")
+async def settle_prop(ctx, matchup_id: str, *, result):
+    """
+    Admin settles a prop matchup.
+    - numeric prop: enter actual number (e.g., 362)
+    - choice prop: enter winning name (e.g., "Caleb Williams")
+    """
+    if not is_admin(ctx):
+        return await ctx.send("❌ You are not an admin.")
+
+    matchup = MATCHUPS.get(matchup_id)
+    if not matchup:
+        return await ctx.send("❌ Matchup not found.")
+    if matchup["settled"]:
+        return await ctx.send("❌ Already settled.")
+
+    matchup["settled"] = True
+    matchup["result"] = result
+    payout_messages = []
+
+    for bet_id, bet in matchup["bets"].items():
+        user = get_user(bet["user_id"])
+        payout = 0
+
+        if matchup.get("prop_type") == "numeric":
+            # Simple payout: closer predictions get paid
+            actual = float(result)
+            predicted = float(bet["selection"])
+            distance = max(1, abs(actual - predicted))
+            payout = int(bet["amount"] * (1 + 100 / distance))  # example scaling
+        else:
+            # choice prop: exact match
+            if str(bet["selection"]).lower() == str(result).lower():
+                payout = bet["amount"] * 2  # simple 2x payout
+
+        bet["payout"] = payout
+        user["balance"] += payout
+        bet["resolved"] = True
+        user["history"].append(bet)
+        del user["bets"][bet_id]
+        payout_messages.append(f"<@{bet['user_id']}> won {format_currency(payout)}!")
+
+    save_users(); save_matchups()
+
+    msg = "\n".join(payout_messages) if payout_messages else "Nobody won this prop."
+    await ctx.send(embed=discord.Embed(
+        title=f"🏁 Prop Bet Settled: {matchup['title']}",
+        description=msg,
+        color=discord.Color.green()
+    ))
 
 # =============================
 # Run the Bot
