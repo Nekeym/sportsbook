@@ -44,8 +44,6 @@ USERS_FILE = "users.json"
 MATCHUPS_FILE = "matchups.json"
 USERS = {}
 MATCHUPS = {}
-USERS = load_users()
-MATCHUPS = load_matchups()
 
 
 def load_users():
@@ -93,6 +91,9 @@ def get_user(user_id):
         }
         save_users()
     return USERS[user_id]
+
+USERS = load_users()
+MATCHUPS = load_matchups()
 
 # =============================
 # Odds & Payout Logic
