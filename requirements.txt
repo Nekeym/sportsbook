@@ -2,3 +2,20 @@ discord.py==2.3.2
 flask==3.0.3
 requests
 python-dotenv
+
+USER_COMMANDS = {
+    "balance": "Check your current coin balance.",
+    "daily": "Claim your daily free coins.",
+    "matchups": "View all active matchups.",
+    "bet": "Place a bet on a matchup (spread or O/U).",
+    "leaderboard": "View the top users by coins.",
+    "help": "Show this help menu."
+}
+
+ADMIN_COMMANDS = {
+    "addmatchup": "Add a new matchup with teams, spread, OU line, and odds.",
+    "removematchup": "Remove a matchup by ID.",
+    "settlematchup": "Settle a matchup and pay out bets.",
+    "forcemodify": "Force modify a user’s balance (admin only).",
+    "resetcoins": "Reset all users’ coins back to default.",
+}
