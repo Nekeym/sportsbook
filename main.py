@@ -762,13 +762,13 @@ async def props(ctx):
 @bot.command(name="help")
 async def user_help(ctx):
     desc = "\n".join([f"• **{cmd}** — {desc}" for cmd, desc in USER_COMMANDS.items()])
-    await ctx.send(embed=discord.Embed(title="📖 User Commands", description=desc, color=discord.Colour.blue))
+    await ctx.send(embed=discord.Embed(title="📖 User Commands", description=desc, color=discord.Colour.blue()))
 
 @bot.command(name="adminhelp")
 async def admin_help(ctx):
     if not is_admin(ctx): return await ctx.send("❌ You are not an admin.")
     desc = "\n".join([f"• **{cmd}** — {desc}" for cmd, desc in ADMIN_COMMANDS.items()])
-    await ctx.send(embed=discord.Embed(title="⚡ Admin Commands", description=desc, color=discord.Colour.red))
+    await ctx.send(embed=discord.Embed(title="⚡ Admin Commands", description=desc, color=discord.Colour.red()))
 
 # =============================
 # Run the Bot
