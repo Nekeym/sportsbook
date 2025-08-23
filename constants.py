@@ -1,5 +1,6 @@
 # constants.py
 
+# Admin Commands
 ADMIN_COMMANDS = {
     "addmatchup": "Add a matchup (spread, over/under, prop).",
     "editmatchup": "Edit a matchup field.",
@@ -9,9 +10,10 @@ ADMIN_COMMANDS = {
     "removemoney": "Remove coins from a user.",
     "lockmatchup": "Lock betting on a matchup.",
     "addprop": "Adds a prop bet.",
-    "editprop": "Edits a prop bet.",
+    "editprop": "Edits a prop bet."
 }
 
+# User Commands
 USER_COMMANDS = {
     "daily": "Claim your daily bonus.",
     "balance": "Check your balance (or another user's).",
@@ -23,5 +25,5 @@ USER_COMMANDS = {
     "volume": "Show betting volume for a matchup.",
     "weekly": "Check weekly challenge progress.",
     "props": "View all active props.",
-    "betprop": "Bet on an active prop.",
+    "betprop": "Bet on an active prop."
 }
