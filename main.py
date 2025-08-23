@@ -773,4 +773,9 @@ async def admin_help(ctx):
 # =============================
 # Run the Bot
 # =============================
+print("🚀 Bot Starting...")
+print("🚀 Connecting to the Sweat...")
+print("🚀 Loading Oregon National Championship...")
+print("🚀 Initiated the bot...")
+print("WELCOME SUPREME LEADER KOLTON")
 bot.run(TOKEN)
