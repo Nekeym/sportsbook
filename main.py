@@ -179,7 +179,7 @@ async def daily(ctx):
         return await ctx.send(embed=discord.Embed(
             title="❌ Daily Already Claimed",
             description="Come back in 24 hours to claim again!",
-            color=discord.Color.red()
+            color=discord.Colour.red()
         ))
 
     user["balance"] += DAILY_CLAIM_AMOUNT
@@ -189,7 +189,7 @@ async def daily(ctx):
     await ctx.send(embed=discord.Embed(
         title="✅ Daily Claimed",
         description=f"You received {format_currency(DAILY_CLAIM_AMOUNT)}.\nNew balance: {format_currency(user['balance'])}",
-        color=discord.Color.green()
+        color=discord.Colour.green()
     ))
 
 @bot.command(name="balance")
@@ -200,7 +200,7 @@ async def balance(ctx, member: discord.Member = None):
     await ctx.send(embed=discord.Embed(
         title=f"{member.display_name}'s Balance",
         description=f"{format_currency(user['balance'])}",
-        color=discord.Color.gold()
+        color=discord.Colour.gold()
     ))
 
 @bot.command(name="history")
@@ -221,7 +221,7 @@ async def history(ctx, member: discord.Member = None):
     await ctx.send(embed=discord.Embed(
         title=f"{member.display_name}'s Betting History",
         description=history_text,
-        color=discord.Color.blue()
+        color=discord.Colour.blue()
     ))
 
 @bot.command(name="leaderboard")
@@ -232,7 +232,7 @@ async def leaderboard(ctx, category: str = "balance"):
         return await ctx.send(embed=discord.Embed(
             title="❌ Invalid Category",
             description=f"Choose from: {', '.join(valid)}",
-            color=discord.Color.red()
+            color=discord.Colour.red()
         ))
 
     sorted_users = sorted(
@@ -254,7 +254,7 @@ async def leaderboard(ctx, category: str = "balance"):
     await ctx.send(embed=discord.Embed(
         title=f"🏆 Leaderboard: {category.title()}",
         description=desc,
-        color=discord.Color.gold()
+        color=discord.Colour.gold()
     ))
 
 # =============================
@@ -293,7 +293,7 @@ async def add_matchup(ctx, kind: str, title: str, home: str = None, away: str = 
     await ctx.send(embed=discord.Embed(
         title="✅ Matchup Created",
         description=f"**{title}** (type: {kind})",
-        color=discord.Color.green()
+        color=discord.Colour.green()
     ))
 
 @bot.command(name="editmatchup")
@@ -314,7 +314,7 @@ async def edit_matchup(ctx, matchup_id: str, field: str, *, value: str):
     await ctx.send(embed=discord.Embed(
         title="✅ Matchup Updated",
         description=f"{field} set to `{value}` for {matchup['title']}",
-        color=discord.Color.green()
+        color=discord.Colour.green()
     ))
 
 @bot.command(name="removematchup")
@@ -327,7 +327,7 @@ async def remove_matchup(ctx, matchup_id: str):
     await ctx.send(embed=discord.Embed(
         title="✅ Matchup Removed",
         description=f"Removed matchup: {matchup['title']}",
-        color=discord.Color.red()
+        color=discord.Colour.red()
     ))
 
 @bot.command(name="lockmatchup")
@@ -341,7 +341,7 @@ async def lock_matchup(ctx, matchup_id: str):
     await ctx.send(embed=discord.Embed(
         title="🔒 Matchup Locked",
         description=f"Betting is now locked for {matchup['title']}.",
-        color=discord.Color.red()
+        color=discord.Colour.red()
     ))
 
 @bot.command(name="settlematchup")
@@ -381,7 +381,7 @@ async def settle_matchup(ctx, matchup_id: str, winning_selection: str):
     embed = discord.Embed(
         title=f"🏁 Matchup Settled: {matchup['title']}",
         description=msg,
-        color=discord.Color.green()
+        color=discord.Colour.green()
     )
     channel = ctx.guild.get_channel(PAYOUT_CHANNEL_ID) if PAYOUT_CHANNEL_ID else ctx.channel
     await channel.send(embed=embed)
@@ -430,7 +430,7 @@ async def bet(ctx, matchup_id: str, selection: str, amount: int):
     await ctx.send(embed=discord.Embed(
         title="🎟️ Bet Slip",
         description=f"Matchup: {matchup['title']}\nPick: **{selection.upper()}**\nWager: {format_currency(amount)}\nOdds: {odds:.2f}",
-        color=discord.Color.blue()
+        color=discord.Colour.blue()
     ))
 
 @bot.command(name="pending")
@@ -450,7 +450,7 @@ async def pending(ctx, member: discord.Member = None):
     await ctx.send(embed=discord.Embed(
         title=f"📋 Pending Bets: {member.display_name}",
         description=desc,
-        color=discord.Color.orange()
+        color=discord.Colour.orange()
     ))
 
 # =============================
@@ -466,7 +466,7 @@ async def parlay(ctx):
     if not open_matchups: return await ctx.send("❌ No open matchups available for parlays.")
 
     desc = "\n".join([f"{i+1}. {m['home']} vs {m['away']} (Type: {m['type']})" if m.get("home") else f"{i+1}. {m['title']} (Type: {m['type']})" for i, m in enumerate(open_matchups)])
-    await ctx.send(embed=discord.Embed(title="📋 Open Matchups", description=desc, color=discord.Color.blurple()))
+    await ctx.send(embed=discord.Embed(title="📋 Open Matchups", description=desc, color=discord.Colour.blurple()))
 
     # Step 2: Ask for leg numbers
     await ctx.send("Enter the numbers of the matchups you want in your parlay (2-5), separated by commas:")
@@ -526,7 +526,7 @@ async def parlay(ctx):
 
     # Step 7: Send confirmation
     desc = "\n".join([f"• {leg['selection']} on {MATCHUPS.get(leg['matchup_id'], {}).get('title','Prop Bet')} (Odds: {leg['odds']:.2f})" for leg in legs])
-    embed = discord.Embed(title="🎟️ Parlay Bet Slip", description=desc, color=discord.Color.blue())
+    embed = discord.Embed(title="🎟️ Parlay Bet Slip", description=desc, color=discord.Colour.blue())
     embed.add_field(name="Stake", value=format_currency(amount))
     embed.add_field(name="Combined Odds", value=f"{combined_odds:.2f}")
     embed.set_footer(text=f"Bet ID: {bet_id}")
@@ -560,7 +560,7 @@ async def weekly(ctx):
     await ctx.send(embed=discord.Embed(
         title=f"📅 Weekly Challenge — {ctx.author.display_name}",
         description=desc,
-        color=discord.Color.teal()
+        color=discord.Colour.teal()
     ))
 
 @bot.command(name="volume")
@@ -578,7 +578,7 @@ async def volume(ctx, matchup_id: str):
     await ctx.send(embed=discord.Embed(
         title=f"📊 Bet Volume: {matchup['title']}",
         description=desc,
-        color=discord.Color.purple()
+        color=discord.Colour.purple()
     ))
 
 # =============================
@@ -597,7 +597,7 @@ async def add_money(ctx, member: discord.Member, amount: int):
     await ctx.send(embed=discord.Embed(
         title="✅ Money Added",
         description=f"{format_currency(amount)} added to {member.display_name}. New balance: {format_currency(user['balance'])}",
-        color=discord.Color.green()
+        color=discord.Colour.green()
     ))
 
 @bot.command(name="removemoney")
@@ -613,7 +613,7 @@ async def remove_money(ctx, member: discord.Member, amount: int):
     await ctx.send(embed=discord.Embed(
         title="✅ Money Removed",
         description=f"{format_currency(amount)} removed from {member.display_name}. New balance: {format_currency(user['balance'])}",
-        color=discord.Color.orange()
+        color=discord.Colour.orange()
     ))
 
 # =============================
@@ -641,7 +641,7 @@ async def add_prop(ctx, prop_type: str, *, question: str):
     await ctx.send(embed=discord.Embed(
         title="✅ Prop Bet Created",
         description=f"**{question}** (Type: {prop_type.capitalize()})\nMatchup ID: {mid}",
-        color=discord.Color.green()
+        color=discord.Colour.green()
     ))
 
 @bot.command(name="betprop")
@@ -684,7 +684,7 @@ async def bet_prop(ctx, matchup_id: str, value, amount: int):
     await ctx.send(embed=discord.Embed(
         title="🎟️ Prop Bet Placed",
         description=f"Question: {matchup['title']}\nYour Pick: **{value}**\nWager: {format_currency(amount)}",
-        color=discord.Color.blue()
+        color=discord.Colour.blue()
     ))
 
 @bot.command(name="settleprop")
@@ -729,7 +729,7 @@ async def settle_prop(ctx, matchup_id: str, *, result):
     await ctx.send(embed=discord.Embed(
         title=f"🏁 Prop Bet Settled: {matchup['title']}",
         description=msg,
-        color=discord.Color.green()
+        color=discord.Colour.green()
     ))
 
 # =============================
@@ -743,7 +743,7 @@ async def props(ctx):
         return await ctx.send(embed=discord.Embed(
             title="📋 Active Prop Bets",
             description="No active prop bets at the moment.",
-            color=discord.Color.orange()
+            color=discord.Colour.orange()
         ))
 
     desc = ""
@@ -753,7 +753,7 @@ async def props(ctx):
     await ctx.send(embed=discord.Embed(
         title="📋 Active Prop Bets",
         description=desc,
-        color=discord.Color.blurple()
+        color=discord.Colour.blurple()
     ))
 
 # =============================
@@ -762,13 +762,13 @@ async def props(ctx):
 @bot.command(name="help")
 async def user_help(ctx):
     desc = "\n".join([f"• **{cmd}** — {desc}" for cmd, desc in USER_COMMANDS.items()])
-    await ctx.send(embed=discord.Embed(title="📖 User Commands", description=desc, color=discord.Color.blue))
+    await ctx.send(embed=discord.Embed(title="📖 User Commands", description=desc, color=discord.Colour.blue))
 
 @bot.command(name="adminhelp")
 async def admin_help(ctx):
     if not is_admin(ctx): return await ctx.send("❌ You are not an admin.")
     desc = "\n".join([f"• **{cmd}** — {desc}" for cmd, desc in ADMIN_COMMANDS.items()])
-    await ctx.send(embed=discord.Embed(title="⚡ Admin Commands", description=desc, color=discord.Color.red))
+    await ctx.send(embed=discord.Embed(title="⚡ Admin Commands", description=desc, color=discord.Colour.red))
 
 # =============================
 # Run the Bot
