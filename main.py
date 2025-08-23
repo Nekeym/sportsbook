@@ -5,6 +5,7 @@ import os, json, random, math, asyncio, base64, requests
 from datetime import datetime, timedelta
 from flask import Flask
 import threading
+from constants import ADMIN_COMMANDS, USER_COMMANDS
 
 # --- Load Environment Variables ---
 TOKEN = os.getenv("TOKENFORBOTHERE")   # Discord bot token
