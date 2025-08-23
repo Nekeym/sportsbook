@@ -2,10 +2,10 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import os, json, random, math, asyncio, base64, requests
+from constants import USER_COMMANDS, ADMIN_COMMANDS
 from datetime import datetime, timedelta
 from flask import Flask
 import threading
-from constants import ADMIN_COMMANDS, USER_COMMANDS
 
 # --- Load Environment Variables ---
 TOKEN = os.getenv("TOKENFORBOTHERE")   # Discord bot token
