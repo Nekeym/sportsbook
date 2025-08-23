@@ -4,5 +4,26 @@
         "last_daily": "2025-08-19T19:56:20.493951",
         "bet_history": [],
         "win_history": []
+    },
+    "1095141396572278935": {
+        "balance": 500,
+        "bets": {},
+        "history": [],
+        "stats": {
+            "spent": 0,
+            "won": 0,
+            "lost": 0,
+            "bets_won": 0,
+            "bets_lost": 0
+        },
+        "achievements": [],
+        "last_claim": null,
+        "weekly": {
+            "week_start": null,
+            "progress": {
+                "bets": 0
+            },
+            "claimed_this_week": false
+        }
     }
 }
