@@ -8,5 +8,15 @@
         "locked": false,
         "settled": false,
         "result": null
+    },
+    "m_933625": {
+        "id": "m_933625",
+        "type": "prop",
+        "prop_type": "choice",
+        "title": "Who Will Win The National Championship In The 2026 Season?",
+        "bets": {},
+        "locked": false,
+        "settled": false,
+        "result": null
     }
 }
