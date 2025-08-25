@@ -29,31 +29,21 @@
         "settled": false,
         "result": null
     },
-    "m_718315": {
-        "id": "m_718315",
-        "type": "prop",
-        "prop_type": "choice",
-        "title": "Who Will Win The BIG In The 2026 Season?",
-        "bets": {},
-        "locked": false,
-        "settled": false,
-        "result": null
-    },
-    "m_980941": {
-        "id": "m_980941",
-        "type": "prop",
-        "prop_type": "choice",
-        "title": "Who Will Win The BIGXII In The 2026 Season?",
-        "bets": {},
-        "locked": false,
-        "settled": false,
-        "result": null
-    },
-    "m_579785": {
-        "id": "m_579785",
+    "m_203528": {
+        "id": "m_203528",
         "type": "prop",
         "prop_type": "choice",
         "title": "Who Will Win The PAC In The 2026 Season?",
+        "bets": {},
+        "locked": false,
+        "settled": false,
+        "result": null
+    },
+    "m_404591": {
+        "id": "m_404591",
+        "type": "prop",
+        "prop_type": "choice",
+        "title": "Who Will Win The Southeastern Conference In The 2026 Season?",
         "bets": {},
         "locked": false,
         "settled": false,
