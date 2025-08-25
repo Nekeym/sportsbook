@@ -28,5 +28,15 @@
         "locked": false,
         "settled": false,
         "result": null
+    },
+    "m_718315": {
+        "id": "m_718315",
+        "type": "prop",
+        "prop_type": "choice",
+        "title": "Who Will Win The BIG In The 2026 Season?",
+        "bets": {},
+        "locked": false,
+        "settled": false,
+        "result": null
     }
 }
