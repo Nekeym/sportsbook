@@ -48,5 +48,15 @@
         "locked": false,
         "settled": false,
         "result": null
+    },
+    "m_579785": {
+        "id": "m_579785",
+        "type": "prop",
+        "prop_type": "choice",
+        "title": "Who Will Win The PAC In The 2026 Season?",
+        "bets": {},
+        "locked": false,
+        "settled": false,
+        "result": null
     }
 }
