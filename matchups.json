@@ -18,5 +18,15 @@
         "locked": false,
         "settled": false,
         "result": null
+    },
+    "m_525657": {
+        "id": "m_525657",
+        "type": "prop",
+        "prop_type": "choice",
+        "title": "Who Will Win The Atlantic Coast Conference In The 2026 Season?",
+        "bets": {},
+        "locked": false,
+        "settled": false,
+        "result": null
     }
 }
