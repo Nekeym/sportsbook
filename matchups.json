@@ -68,5 +68,15 @@
         "locked": false,
         "settled": false,
         "result": null
+    },
+    "m_734669": {
+        "id": "m_734669",
+        "type": "prop",
+        "prop_type": "choice",
+        "title": "Who Will Be The #1 Seed?",
+        "bets": {},
+        "locked": false,
+        "settled": false,
+        "result": null
     }
 }
