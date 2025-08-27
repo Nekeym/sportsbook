@@ -6,7 +6,7 @@
         "win_history": []
     },
     "1095141396572278935": {
-        "balance": 550,
+        "balance": 600,
         "bets": {},
         "history": [],
         "stats": {
@@ -17,7 +17,7 @@
             "bets_lost": 0
         },
         "achievements": [],
-        "last_claim": "2025-08-23T18:55:39.049242",
+        "last_claim": "2025-08-27T23:59:59.317335",
         "weekly": {
             "week_start": null,
             "progress": {
